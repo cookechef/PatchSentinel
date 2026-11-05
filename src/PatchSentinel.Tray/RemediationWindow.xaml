@@ -40,7 +40,8 @@
                 <StackPanel x:Name="ActionsPanel"/>
                 <TextBlock x:Name="StepsText" TextWrapping="Wrap" Margin="24,6,0,0" Foreground="{StaticResource Muted}"/>
                 <TextBlock x:Name="WarningText" Foreground="{StaticResource Critical}" TextWrapping="Wrap" Margin="0,8,0,0"/>
-                <TextBlock x:Name="ResultText" TextWrapping="Wrap" Margin="0,12,0,0" FontFamily="Consolas" FontSize="12"/>
+                <TextBox x:Name="ResultText" TextWrapping="Wrap" Margin="0,12,0,0" FontFamily="Consolas" FontSize="12"
+                         IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

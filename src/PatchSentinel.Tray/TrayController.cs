@@ -25,6 +25,7 @@ public sealed class TrayController : IDisposable
     private string? _lastAnnouncedJob;
     private (int Count, DateTime At) _lastEolAlert = (-1, DateTime.MinValue);
     private bool _polling;
+    private int _lastManualAlert;
 
     public AgentPipeClient Client { get; } = new();
     public AgentStatus? Status { get; private set; }
@@ -185,6 +186,17 @@ public sealed class TrayController : IDisposable
                 return;
             }
         }
+
+        // Apps whose automatic updates keep failing.
+        if (s.ManualUpdatesNeeded > _lastManualAlert)
+        {
+            _lastManualAlert = s.ManualUpdatesNeeded;
+            Notify("Some apps need a manual update",
+                $"{s.ManualUpdatesNeeded} app(s) could not be updated automatically. Click to see which and why.",
+                Forms.ToolTipIcon.Warning, "updates");
+            return;
+        }
+        _lastManualAlert = s.ManualUpdatesNeeded;
 
         // Completed jobs (except routine scans).
         if (s.LastJob is { } job && job.Id != _lastAnnouncedJob && job.FinishedAt is not null)

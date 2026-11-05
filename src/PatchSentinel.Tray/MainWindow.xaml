@@ -56,9 +56,16 @@
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
                                Text="This software no longer gets security fixes (or is missing patches) and will be reported by vulnerability scans. Select Fix to see which apps still use it and the safest way to remove or upgrade it."/>
-                    <DataGrid x:Name="FindingsGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                    <DataGrid x:Name="FindingsGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" ClipboardCopyMode="IncludeHeader"
                               CanUserAddRows="False" SelectionMode="Single" GridLinesVisibility="Horizontal"
                               HorizontalGridLinesBrush="#E6E6E6" Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0">
+                                                <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                <MenuItem Header="Copy software name" Click="CopyColumn_Click" Tag="Title"/>
+                                <MenuItem Header="Copy installed versions" Click="CopyColumn_Click" Tag="Versions"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="80"/>
                             <DataGridTextColumn Header="Software" Binding="{Binding Title}" Width="2*"/>
@@ -79,6 +86,12 @@
 
             <TabItem Header="App updates" x:Name="UpdatesTab">
                 <DockPanel Margin="10">
+                    <Border DockPanel.Dock="Top" x:Name="ManualBanner" Background="#FFF4E5" BorderBrush="#F0C27B" BorderThickness="1"
+                            CornerRadius="6" Padding="10,6" Margin="0,0,0,10" Visibility="Collapsed">
+                        <TextBlock x:Name="ManualBannerText" TextWrapping="Wrap" Foreground="{StaticResource Warning}"/>
+                    </Border>
+                    <CheckBox DockPanel.Dock="Top" x:Name="ShowWindowsManaged" Margin="0,0,0,8" Click="ShowWindowsManaged_Click"
+                              Content="Show framework and Store packages that Windows updates itself"/>
                     <TextBlock DockPanel.Dock="Top" x:Name="UpdatesIntro" TextWrapping="Wrap" Margin="0,0,0,10"
                                Text="Updates found by winget. Tick Update and choose Install ticked, or tick Exclude for apps that must never be updated automatically, then Save exclusions."/>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
@@ -93,9 +106,18 @@
                         <TextBox x:Name="UpdateResultsText" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12"
                                  MaxHeight="160" VerticalScrollBarVisibility="Auto" BorderThickness="0" Background="#FAFAFA" Padding="6"/>
                     </Expander>
-                    <DataGrid x:Name="UpdatesGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended"
+                    <DataGrid x:Name="UpdatesGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" ClipboardCopyMode="IncludeHeader"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E6E6E6"
                               Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0">
+                                                <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                <MenuItem Header="Copy application name" Click="CopyColumn_Click" Tag="Name"/>
+                                <MenuItem Header="Copy package ID" Click="CopyColumn_Click" Tag="Id"/>
+                                <Separator/>
+                                <MenuItem Header="Remove from manual updates list" Click="ClearManual_Click"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="Update" Width="62">
                                 <DataGridTemplateColumn.CellTemplate>
@@ -118,6 +140,65 @@
                             <DataGridTextColumn Header="Installed" Binding="{Binding Installed}" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Available" Binding="{Binding Available}" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="1.4*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="History" x:Name="HistoryTab">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Every app update and fix PatchSentinel has made on this device. Right-click to copy, or export for your records."/>
+                    <StackPanel DockPanel.Dock="Top" x:Name="ManualPanel" Visibility="Collapsed" Margin="0,0,0,10">
+                        <TextBlock Text="Needs a manual update" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,6"
+                                   Text="Automatic updates of these apps failed repeatedly, so scheduled runs skip them. Update them with the vendor's installer (or tick them on App updates to retry); they leave this list once they are up to date."/>
+                        <DataGrid x:Name="ManualGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" MaxHeight="150"
+                                  ClipboardCopyMode="IncludeHeader" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E6E6E6"
+                                  Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0" SelectionMode="Extended">
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                    <MenuItem Header="Copy application name" Click="CopyColumn_Click" Tag="Name"/>
+                                    <MenuItem Header="Copy package ID" Click="CopyColumn_Click" Tag="Id"/>
+                                    <MenuItem Header="Copy last error" Click="CopyColumn_Click" Tag="LastError"/>
+                                    <Separator/>
+                                    <MenuItem Header="Remove from manual updates list" Click="ClearManual_Click"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Application" Binding="{Binding Name}" Width="2*"/>
+                                <DataGridTextColumn Header="Package ID" Binding="{Binding Id}" Width="2*"/>
+                                <DataGridTextColumn Header="Installed" Binding="{Binding InstalledVersion}" Width="*"/>
+                                <DataGridTextColumn Header="Available" Binding="{Binding AvailableVersion}" Width="*"/>
+                                <DataGridTextColumn Header="Failures" Binding="{Binding Failures}" Width="60"/>
+                                <DataGridTextColumn Header="Last error" Binding="{Binding LastError}" Width="3*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Content="Refresh" Click="RefreshHistory_Click"/>
+                        <Button Content="Export history (CSV)..." Click="ExportHistory_Click"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="HistoryGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                              ClipboardCopyMode="IncludeHeader" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E6E6E6"
+                              Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0" SelectionMode="Extended">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                <MenuItem Header="Copy name" Click="CopyColumn_Click" Tag="Name"/>
+                                <MenuItem Header="Copy details" Click="CopyColumn_Click" Tag="Message"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="When" Binding="{Binding When}" Width="120"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="80"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*"/>
+                            <DataGridTextColumn Header="From" Binding="{Binding From}" Width="*"/>
+                            <DataGridTextColumn Header="To" Binding="{Binding To}" Width="*"/>
+                            <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="70"/>
+                            <DataGridTextColumn Header="Details" Binding="{Binding Message}" Width="3*"/>
+                            <DataGridTextColumn Header="Started by" Binding="{Binding Trigger}" Width="1.2*"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

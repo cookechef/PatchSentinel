@@ -37,6 +37,7 @@ internal sealed class AgentEngine
     private JobInfo? _lastJob;
     private CancellationToken _stopping;
     private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
+    private UpdateTracker _tracker = null!;
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -49,6 +50,7 @@ internal sealed class AgentEngine
         _settings = SettingsStore.LoadEffective(AppPaths.SettingsFile);
         _state = Load<AgentState>(AppPaths.AgentStateFile) ?? new AgentState();
         _lastScan = Load<ScanResult>(AppPaths.LastScanFile);
+        _tracker = new UpdateTracker();
         SaveState();
 
         var pipe = new PipeServer(HandleAsync);
@@ -130,6 +132,7 @@ internal sealed class AgentEngine
         SaveState();
         var msi = await SelfUpdater.DownloadAndVerifyAsync(latest, ct);
         AppLog.Info($"Downloaded and verified {latest.MsiName} (sha256 {latest.Sha256}); starting silent upgrade. The service will restart.");
+        _tracker.RecordEvent(new HistoryEntry { At = DateTimeOffset.Now, Kind = "Self-update", Name = "PatchSentinel", From = AppPaths.Version, To = latest.Version, Success = true, Message = "Verified installer downloaded; upgrade started", Trigger = "Automatic" });
         SelfUpdater.LaunchInstaller(msi);
         return new JobInfo { Success = true, Message = $"Installing PatchSentinel {latest.Version}; the agent will restart." };
     }
@@ -214,6 +217,9 @@ internal sealed class AgentEngine
     private async Task<JobInfo> ScanAsync(CancellationToken ct)
     {
         var result = await Scanner.ScanAsync(_settings, new ScanOptions(), ct);
+        if (result.WingetAvailable && !result.Warnings.Any(w => w.StartsWith("winget update check failed", StringComparison.Ordinal)))
+            _tracker.Reconcile(result.Updates);
+        result.Updates = _tracker.Annotate(result.Updates);
         lock (_gate) _lastScan = result;
         _state.LastScanAt = result.ScannedAt;
         SaveState();
@@ -227,25 +233,31 @@ internal sealed class AgentEngine
         };
     }
 
-    private async Task<JobInfo> InstallUpdatesAsync(IReadOnlyCollection<string>? ids, bool scheduled, CancellationToken ct)
+    private async Task<JobInfo> InstallUpdatesAsync(IReadOnlyCollection<string>? ids, bool scheduled, CancellationToken ct, string trigger = "Manual")
     {
         var winget = WingetClient.TryCreate(isSystem: Platform.IsSystem);
         if (winget is null) return new JobInfo { Success = false, Message = "winget (App Installer) is not available on this device." };
+        if (scheduled) trigger = "Scheduled";
 
-        var available = ExclusionMatcher.Apply(await winget.ListUpgradesAsync(ct), _settings.Settings.ExcludedPackageIds, _settings.PolicyExcludedPackageIds);
-        var targets = available.Where(u => u.Installable && (ids is null || ids.Contains(u.Id, StringComparer.OrdinalIgnoreCase))).ToList();
+        var available = _tracker.Annotate(ExclusionMatcher.Apply(await winget.ListUpgradesAsync(ct), _settings.Settings.ExcludedPackageIds, _settings.PolicyExcludedPackageIds));
+        bool Requested(UpdateCandidate u) => ids is null || ids.Contains(u.Id, StringComparer.OrdinalIgnoreCase);
+        // "Install all" and scheduled runs skip apps flagged for manual updating; ticking one explicitly retries it.
+        var targets = available.Where(u => u.Installable && Requested(u) && (ids is not null || !u.NeedsManualUpdate)).ToList();
 
         var details = new List<string>();
-        var failures = 0;
+        var results = new Dictionary<string, UpdateResult>(StringComparer.OrdinalIgnoreCase);
         foreach (var u in targets)
         {
             ct.ThrowIfCancellationRequested();
             var r = await winget.UpgradeAsync(u.Id, u.Name, ct);
-            if (!r.Success) failures++;
+            results[u.Id] = r;
             details.Add($"{(r.Success ? "OK  " : "FAIL")} {u.Name} {u.InstalledVersion} -> {u.AvailableVersion}: {r.Message}");
         }
-        foreach (var skipped in available.Where(u => !u.Installable && (ids is null || ids.Contains(u.Id, StringComparer.OrdinalIgnoreCase))))
-            details.Add($"SKIP {skipped.Name}: {(skipped.ManagedByWindows ? "updated by Windows" : skipped.Excluded ? "excluded" : skipped.RequiresExplicit ? "pinned/explicit only" : "id truncated by winget")}");
+        foreach (var skipped in available.Where(u => Requested(u) && !targets.Contains(u)))
+            details.Add($"SKIP {skipped.Name}: " + (skipped.ManagedByWindows ? "updated by Windows"
+                : skipped.Excluded ? "excluded"
+                : skipped.NeedsManualUpdate ? "needs a manual update (tick it to retry)"
+                : skipped.RequiresExplicit ? "pinned/explicit only" : "id truncated by winget"));
 
         if (scheduled)
         {
@@ -257,27 +269,38 @@ internal sealed class AgentEngine
 
         await ScanAsync(ct);
 
-        // winget sometimes reports success while the old version is still detected (e.g. side-by-side packages).
+        // Confirm each result against a fresh list: winget sometimes reports success while the old version remains.
         List<UpdateCandidate> still;
         lock (_gate) still = _lastScan?.Updates ?? [];
-        var notApplied = 0;
+        int ok = 0, failed = 0, notApplied = 0;
+        var newlyManual = new List<string>();
         foreach (var u in targets)
         {
+            var r = results[u.Id];
             var after = still.FirstOrDefault(x => x.Id.Equals(u.Id, StringComparison.OrdinalIgnoreCase));
-            if (after is not null && VersionUtil.Compare(after.InstalledVersion, u.InstalledVersion) <= 0
-                && details.Any(d => d.StartsWith("OK", StringComparison.Ordinal) && d.Contains(u.Name, StringComparison.Ordinal)))
+            string? error = null;
+            if (!r.Success) { failed++; error = r.Message; }
+            else if (after is not null && VersionUtil.Compare(after.InstalledVersion, u.InstalledVersion) <= 0)
             {
                 notApplied++;
-                details.Add($"WARN {u.Name}: winget reported success but {u.InstalledVersion} is still detected. The app may need closing, a restart, or updating in the user's own session ('Update my per-user apps').");
+                error = $"winget reported success but {u.InstalledVersion} is still installed";
+                details.Add($"WARN {u.Name}: {error}. The app may need closing or a restart, or it only updates from its own installer.");
             }
-        }
 
-        var installed = targets.Count - failures - notApplied;
+            if (error is null) { ok++; _tracker.RecordSuccess(u, trigger); }
+            else if (_tracker.RecordFailure(u, error, trigger)) newlyManual.Add(u.Name);
+        }
+        foreach (var name in newlyManual)
+            details.Add($"MANUAL {name}: failed {UpdateTracker.FailuresBeforeManual} times, so it has been added to the manual updates list and will be skipped by scheduled runs.");
+
+        lock (_gate) if (_lastScan is not null) _lastScan.Updates = _tracker.Annotate(_lastScan.Updates);
+
         return new JobInfo
         {
-            Success = failures == 0 && notApplied == 0,
+            Success = failed == 0 && notApplied == 0,
             Message = targets.Count == 0 ? "No updates to install."
-                : $"Updated {installed} of {targets.Count} app(s)" + (failures > 0 ? $", {failures} failed" : "") + (notApplied > 0 ? $", {notApplied} still showing as outdated" : "") + ".",
+                : $"Updated {ok} of {targets.Count} app(s)" + (failed > 0 ? $", {failed} failed" : "") + (notApplied > 0 ? $", {notApplied} still showing as outdated" : "")
+                  + (newlyManual.Count > 0 ? $"; {string.Join(", ", newlyManual)} now need a manual update" : "") + ".",
             Details = details,
         };
     }
@@ -287,6 +310,12 @@ internal sealed class AgentEngine
         AppLog.Info($"Remediation requested by {caller}: {finding.Id} / {action.Id}");
         var executor = new RemediationExecutor(WingetClient.TryCreate(Platform.IsSystem), Platform.IsSystem);
         var result = await executor.ExecuteAsync(finding, action, s => !s.RequiresUserContext, ct);
+        _tracker.RecordEvent(new HistoryEntry
+        {
+            At = DateTimeOffset.Now, Kind = "Fix", Name = finding.Title, Id = finding.Id,
+            From = string.Join(", ", finding.Items.Select(i => i.Version).Distinct()), To = action.Label,
+            Success = result.Success, Message = result.Summary, Trigger = caller,
+        });
         await ScanAsync(ct);
         return new JobInfo
         {
@@ -320,7 +349,7 @@ internal sealed class AgentEngine
                 {
                     var ids = Payload<InstallUpdatesRequest>(req)?.Ids;
                     if (ids is not null && ids.Any(i => !WingetClient.IsValidId(i))) return Task.FromResult(PipeResponse.Fail("Invalid package id."));
-                    return Task.FromResult(Started(StartBackgroundJob("Installing updates", "updates", c => InstallUpdatesAsync(ids, scheduled: false, c))));
+                    return Task.FromResult(Started(StartBackgroundJob("Installing updates", "updates", c => InstallUpdatesAsync(ids, scheduled: false, c, caller.Name))));
                 }
 
                 case Commands.Remediate:
@@ -334,6 +363,18 @@ internal sealed class AgentEngine
                     var action = finding?.Actions.FirstOrDefault(a => a.Id == r.ActionId);
                     if (finding is null || action is null) return Task.FromResult(PipeResponse.Fail("That issue is no longer present - run a new scan."));
                     return Task.FromResult(Started(StartBackgroundJob($"Fixing {finding.Title}", "remediate", c => RemediateAsync(finding, action, caller.Name, c))));
+                }
+
+                case Commands.GetHistory:
+                    return Task.FromResult(PipeResponse.Success(_tracker.View()));
+
+                case Commands.ClearManual:
+                {
+                    var id = Payload<ClearManualRequest>(req)?.Id;
+                    if (string.IsNullOrWhiteSpace(id) || !WingetClient.IsValidId(id)) return Task.FromResult(PipeResponse.Fail("Invalid package id."));
+                    _tracker.ClearManual(id);
+                    lock (_gate) if (_lastScan is not null) _lastScan.Updates = _lastScan.Updates.Select(u => u.Id.Equals(id, StringComparison.OrdinalIgnoreCase) ? u with { NeedsManualUpdate = false, ManualReason = null } : u).ToList();
+                    return Task.FromResult(PipeResponse.Success(_tracker.View()));
                 }
 
                 case Commands.GetSettings:
@@ -428,6 +469,7 @@ internal sealed class AgentEngine
                 AllowUserRemediation = _settings.Settings.AllowUserRemediation,
                 ScheduleLocked = _settings.ScheduleLockedByPolicy,
                 NotifyMinutesBefore = sch.NotifyMinutesBefore,
+                ManualUpdatesNeeded = _tracker?.FlaggedCount ?? 0,
             };
         }
     }

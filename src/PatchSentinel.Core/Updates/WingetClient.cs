@@ -89,15 +89,32 @@ public sealed class WingetClient
         var r = await ProcessRunner.RunAsync(ExePath, $"{verb} --id \"{id}\" --exact {extra} {Common}", TimeSpan.FromMinutes(60), ct);
         if (r.TimedOut) return new UpdateResult(id, name, false, -1, $"winget {verb} timed out after 60 minutes.");
         var ok = r.ExitCode is 0 or UpdateNotApplicable or PackageAlreadyInstalled;
+        var detail = Tail(r.StdOut + r.StdErr);
+        if (!ok && r.ExitCode != 0 && string.IsNullOrWhiteSpace(detail)) detail = await DescribeErrorAsync(r.ExitCode, ct) ?? "";
         var msg = r.ExitCode switch
         {
             0 => $"{verb} succeeded",
             UpdateNotApplicable => "Already up to date",
             PackageAlreadyInstalled => "Already installed",
             NoApplicableInstaller => "No installer applicable to this device (try running in the user's context)",
-            _ => $"winget {verb} failed (0x{r.ExitCode:X8}): {Tail(r.StdOut + r.StdErr)}",
+            _ => $"winget {verb} failed (0x{r.ExitCode:X8}){(detail.Length > 0 ? ": " + detail : "")}",
         };
         return new UpdateResult(id, name, ok, r.ExitCode, msg);
+    }
+
+    /// <summary>Uses "winget error &lt;code&gt;" to turn an exit code into Microsoft's description.</summary>
+    public async Task<string?> DescribeErrorAsync(int code, CancellationToken ct)
+    {
+        try
+        {
+            var r = await ProcessRunner.RunAsync(ExePath, $"error 0x{code:X8}", TimeSpan.FromSeconds(20), ct);
+            var lines = r.StdOut.Split('\n').Select(l => l.Split('\r').Last().Trim()).Where(l => l.Length > 0 && l.Any(char.IsLetter)).ToList();
+            var line = lines.FirstOrDefault(l => l.Contains(" : ", StringComparison.Ordinal)) ?? lines.LastOrDefault();
+            if (line is null || line.Contains("not found", StringComparison.OrdinalIgnoreCase) && line.Contains("error", StringComparison.OrdinalIgnoreCase)) return null;
+            var idx = line.IndexOf(" : ", StringComparison.Ordinal);
+            return idx >= 0 ? line[(idx + 3)..].Trim() : line;
+        }
+        catch { return null; }
     }
 
     private static string Tail(string s)

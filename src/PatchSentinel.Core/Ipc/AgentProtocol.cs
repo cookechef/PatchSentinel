@@ -39,7 +39,46 @@ public static class Commands
     public const string SetExclusions = "set-exclusions";
     public const string SetSchedule = "set-schedule";
     public const string Defer = "defer";
+    public const string GetHistory = "get-history";
+    public const string ClearManual = "clear-manual";
 }
+
+/// <summary>An app whose automatic update keeps failing and needs updating by hand.</summary>
+public sealed class ManualUpdateEntry
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int Failures { get; set; }
+    public string LastError { get; set; } = "";
+    public string? InstalledVersion { get; set; }
+    public string? AvailableVersion { get; set; }
+    public DateTimeOffset FirstFailedAt { get; set; }
+    public DateTimeOffset LastFailedAt { get; set; }
+    public bool Flagged { get; set; }
+}
+
+public sealed class HistoryEntry
+{
+    public DateTimeOffset At { get; set; }
+    /// <summary>"Update", "Fix" or "Self-update".</summary>
+    public string Kind { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string? Id { get; set; }
+    public string? From { get; set; }
+    public string? To { get; set; }
+    public bool Success { get; set; }
+    public string Message { get; set; } = "";
+    /// <summary>"Scheduled", "Manual" or the user who asked.</summary>
+    public string Trigger { get; set; } = "";
+}
+
+public sealed class HistoryView
+{
+    public List<HistoryEntry> Entries { get; set; } = [];
+    public List<ManualUpdateEntry> ManualUpdates { get; set; } = [];
+}
+
+public sealed record ClearManualRequest(string Id);
 
 public sealed class JobInfo
 {
@@ -72,6 +111,7 @@ public sealed class AgentStatus
     public bool AllowUserRemediation { get; set; }
     public bool ScheduleLocked { get; set; }
     public int NotifyMinutesBefore { get; set; }
+    public int ManualUpdatesNeeded { get; set; }
 }
 
 public sealed class SettingsView

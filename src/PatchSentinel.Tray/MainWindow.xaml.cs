@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using PatchSentinel.Core;
 using PatchSentinel.Core.Config;
 using PatchSentinel.Core.Ipc;
@@ -25,6 +26,20 @@ public sealed class FindingRow
     public string Status { get; init; } = "";
     public string Versions { get; init; } = "";
     public string Dependents { get; init; } = "";
+}
+
+public sealed class HistoryRow
+{
+    public HistoryEntry Entry { get; init; } = new();
+    public string When => Entry.At.LocalDateTime.ToString("dd MMM yyyy HH:mm");
+    public string Kind => Entry.Kind;
+    public string Name => Entry.Name;
+    public string? Id => Entry.Id;
+    public string From => Entry.From ?? "";
+    public string To => Entry.To ?? "";
+    public string Result => Entry.Success ? "OK" : "Failed";
+    public string Message => Entry.Message;
+    public string Trigger => Entry.Trigger;
 }
 
 public sealed class UpdateRow : INotifyPropertyChanged
@@ -87,6 +102,8 @@ public partial class MainWindow : Window
     private SettingsView? _settings;
     private bool _localMode;
     private bool _loadingScan;
+    private HistoryView? _history;
+    private string? _lastSeenJob;
 
     public MainWindow(TrayController tray)
     {
@@ -105,6 +122,7 @@ public partial class MainWindow : Window
         "findings" => FindingsTab,
         "updates" => UpdatesTab,
         "schedule" => ScheduleTab,
+        "history" => HistoryTab,
         _ => OverviewTab,
     };
 
@@ -113,6 +131,7 @@ public partial class MainWindow : Window
         await _tray.PollAsync();
         await LoadScanAsync();
         await LoadSettingsAsync();
+        await LoadHistoryAsync();
     }
 
     private async void OnStatusChanged(object? sender, EventArgs e)
@@ -121,6 +140,11 @@ public partial class MainWindow : Window
         var st = _tray.Status;
         if (st?.LastScanAt is { } last && (_scan is null || _localMode || last != _scan.ScannedAt))
             await LoadScanAsync();
+        if (st?.LastJob?.Id is { } jobId && jobId != _lastSeenJob)
+        {
+            _lastSeenJob = jobId;
+            await LoadHistoryAsync();
+        }
     }
 
     // ---------------- loading ----------------
@@ -268,7 +292,8 @@ public partial class MainWindow : Window
         FindingsTab.Header = _scan.Counts.EndOfLife > 0 ? $"Legacy & end-of-life ({_scan.Findings.Count})" : "Legacy & end-of-life";
 
         _updates.Clear();
-        foreach (var u in _scan.Updates)
+        var showWindows = ShowWindowsManaged.IsChecked == true;
+        foreach (var u in _scan.Updates.Where(x => showWindows || !x.ManagedByWindows))
         {
             var pattern = _settings?.ExcludedPackageIds.FirstOrDefault(p => p.Contains('*') && ExclusionMatcher.IsMatch([p], u.Id, u.Name));
             _updates.Add(new UpdateRow
@@ -277,6 +302,7 @@ public partial class MainWindow : Window
                 Excluded = u.Excluded,
                 ExclusionsAllowed = _settings?.AllowUserExclusions ?? true,
                 Note = u.ManagedByWindows ? "Updated by Windows / Microsoft Store"
+                    : u.NeedsManualUpdate ? $"Update manually - automatic update keeps failing ({u.ManualReason})"
                     : u.ExcludedByPolicy ? "Excluded by your administrator"
                     : pattern is not null ? $"Excluded by pattern {pattern}"
                     : u.RequiresExplicit ? "Pinned - update manually"
@@ -284,6 +310,11 @@ public partial class MainWindow : Window
                     : "",
             });
         }
+        var manual = _scan.Updates.Where(u => u.NeedsManualUpdate).ToList();
+        ManualBanner.Visibility = manual.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ManualBannerText.Text = manual.Count == 0 ? "" :
+            $"{manual.Count} app(s) need updating by hand because automatic updates keep failing: {string.Join(", ", manual.Select(m => m.Name))}. " +
+            "Scheduled runs skip them; tick Update to retry, or see the History tab for the error.";
         UpdatesTab.Header = _scan.Counts.UpdatesAvailable > 0 ? $"App updates ({_scan.Counts.UpdatesAvailable})" : "App updates";
         UpdatesIntro.Text = _scan.WingetAvailable
             ? "Updates found by winget. Tick Exclude for apps that must not be updated automatically, then Save exclusions."
@@ -369,6 +400,95 @@ public partial class MainWindow : Window
         File.WriteAllText(dlg.FileName, content);
         StatusBarText.Text = $"Report saved to {dlg.FileName}";
     }
+
+    // ---------------- history ----------------
+
+    private async Task LoadHistoryAsync()
+    {
+        if (!_tray.AgentReachable) return;
+        try
+        {
+            _history = await _tray.Client.GetAsync<HistoryView>(Commands.GetHistory, timeout: TimeSpan.FromSeconds(15));
+            if (_history is null) return;
+            HistoryGrid.ItemsSource = _history.Entries.Select(e => new HistoryRow { Entry = e }).ToList();
+            ManualGrid.ItemsSource = _history.ManualUpdates;
+            ManualPanel.Visibility = _history.ManualUpdates.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception ex) { StatusBarText.Text = $"Could not load history: {ex.Message}"; }
+    }
+
+    private async void RefreshHistory_Click(object sender, RoutedEventArgs e) => await LoadHistoryAsync();
+
+    private void ExportHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_history is null || _history.Entries.Count == 0) { MessageBox.Show(this, "There is no history yet.", "Export history"); return; }
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"PatchSentinel-history-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}",
+            Filter = "CSV for Excel (*.csv)|*.csv",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        static string Csv(string? v) => v is null ? "" : "\"" + v.Replace("\"", "\"\"") + "\"";
+        var lines = new List<string> { "When,Type,Name,Package ID,From,To,Result,Details,Started by" };
+        lines.AddRange(_history.Entries.Select(h => string.Join(',', Csv(h.At.LocalDateTime.ToString("yyyy-MM-dd HH:mm")), Csv(h.Kind), Csv(h.Name), Csv(h.Id),
+            Csv(h.From), Csv(h.To), Csv(h.Success ? "OK" : "Failed"), Csv(h.Message), Csv(h.Trigger))));
+        File.WriteAllLines(dlg.FileName, lines);
+        StatusBarText.Text = $"History saved to {dlg.FileName}";
+    }
+
+    // ---------------- copy / context menus ----------------
+
+    private static DataGrid? GridFor(object sender) =>
+        (sender as MenuItem)?.Parent is ContextMenu menu ? menu.PlacementTarget as DataGrid : null;
+
+    private static void SetClipboard(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        for (var i = 0; i < 5; i++)
+        {
+            try { Clipboard.SetText(text); return; }
+            catch (System.Runtime.InteropServices.COMException) { Thread.Sleep(50); } // clipboard briefly locked by another app
+        }
+    }
+
+    private void CopyRows_Click(object sender, RoutedEventArgs e)
+    {
+        var grid = GridFor(sender);
+        if (grid is null) return;
+        if (grid.SelectedItems.Count == 0) grid.SelectAll();
+        ApplicationCommands.Copy.Execute(null, grid);
+    }
+
+    private void CopyColumn_Click(object sender, RoutedEventArgs e)
+    {
+        var grid = GridFor(sender);
+        var prop = (sender as MenuItem)?.Tag as string;
+        if (grid is null || prop is null) return;
+        var items = grid.SelectedItems.Count > 0 ? grid.SelectedItems.Cast<object>() : grid.Items.Cast<object>();
+        var values = items.Select(i => i.GetType().GetProperty(prop)?.GetValue(i)?.ToString())
+                          .Where(v => !string.IsNullOrWhiteSpace(v)).Distinct();
+        SetClipboard(string.Join(Environment.NewLine, values));
+        StatusBarText.Text = "Copied to the clipboard.";
+    }
+
+    private async void ClearManual_Click(object sender, RoutedEventArgs e)
+    {
+        var grid = GridFor(sender);
+        if (grid is null) return;
+        var ids = grid.SelectedItems.Cast<object>()
+            .Select(i => i switch { UpdateRow u when u.Candidate.NeedsManualUpdate => u.Id, ManualUpdateEntry m => m.Id, _ => null })
+            .Where(i => i is not null).Cast<string>().Distinct().ToList();
+        if (ids.Count == 0) { MessageBox.Show(this, "Select apps that are on the manual updates list.", "Manual updates"); return; }
+        try
+        {
+            foreach (var id in ids) await _tray.Client.SendAsync(Commands.ClearManual, new ClearManualRequest(id));
+            await LoadScanAsync();
+            await LoadHistoryAsync();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Manual updates"); }
+    }
+
+    private void ShowWindowsManaged_Click(object sender, RoutedEventArgs e) => RenderScan();
 
     // ---------------- findings ----------------
 

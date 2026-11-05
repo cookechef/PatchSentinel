@@ -18,6 +18,8 @@ PatchSentinel covers both jobs. It installs app updates with winget on a schedul
 | | |
 |---|---|
 | **Scheduled winget updates** | Daily or weekly at a chosen time, random start delay for fleets, reminder before the run, postpone (limited number of times), and catch-up if the PC was off. |
+| **Manual updates list** | Apps whose automatic update fails twice in a row (e.g. VPN clients with drivers) are flagged as "update manually", skipped by scheduled runs and listed with the error. They leave the list once they're up to date. Framework packages that Windows updates itself (Windows App Runtime, VCLibs and so on) are hidden from the list. |
+| **History** | Every update, fix and self-update is recorded with versions, result, error and who started it. It can be copied or exported to CSV as patching evidence. |
 | **Exclusions** | Users can tick apps to exclude (wildcards such as `Adobe.*` are supported). Admins can enforce exclusions by policy, which users cannot override. |
 | **EOL / legacy detection** | Reads `dotnet\shared\*` and `dotnet\sdk\*` folders (x64, x86 and arm64) as well as Add/Remove Programs for all users. EOL dates and latest patch versions come from [endoflife.date](https://endoflife.date), with built-in dates as an offline fallback. |
 | **Advance warning** | Flags software approaching end of life (90 days by default). For example, **.NET 8 and .NET 9 reach end of support on 10 November 2026**. |

@@ -140,6 +140,9 @@ public sealed record UpdateCandidate
     public bool ExcludedByPolicy { get; init; }
     /// <summary>Framework/store package that Windows keeps up to date itself; winget often reports it as permanently outdated.</summary>
     public bool ManagedByWindows { get; init; }
+    /// <summary>Automatic updates of this app keep failing; it is skipped by scheduled runs until updated by hand or a retry succeeds.</summary>
+    public bool NeedsManualUpdate { get; init; }
+    public string? ManualReason { get; init; }
     /// <summary>winget truncated the package id in its table output; it cannot be targeted safely.</summary>
     public bool IdTruncated { get; init; }
     /// <summary>Package is pinned or requires explicit targeting, so winget will not upgrade it with --all.</summary>

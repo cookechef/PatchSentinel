@@ -136,7 +136,7 @@ internal sealed class AgentEngine
         catch (Exception ex)
         {
             AppLog.Error($"Job failed: {name}", ex);
-            job = new JobInfo { Success = false, Message = ex.Message };
+            job = new JobInfo { Success = false, Message = $"{ex.GetType().Name}: {ex.Message}", Details = [ex.ToString()] };
         }
         finally
         {
@@ -158,7 +158,9 @@ internal sealed class AgentEngine
     {
         if (_jobLock.CurrentCount == 0) return null;
         var id = Guid.NewGuid().ToString("N");
-        _ = Task.Run(() => RunJobAsync(name, kind, work, _stopping, id));
+        // Start the job with a clean execution context so nothing from the pipe request flows into it.
+        using (ExecutionContext.SuppressFlow())
+            _ = Task.Run(() => RunJobAsync(name, kind, work, _stopping, id));
         return id;
     }
 

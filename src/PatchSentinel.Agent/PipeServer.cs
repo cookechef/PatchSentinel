@@ -1,4 +1,6 @@
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -96,23 +98,45 @@ internal sealed class PipeServer(Func<PipeRequest, PipeCaller, Task<PipeResponse
         return sb.Length > 0 ? sb.ToString() : null;
     }
 
+    // Identify the caller from its process token. The service deliberately does NOT impersonate the
+    // client (RunAsClient): an identification-level token left on a thread breaks DLL loading and file
+    // access for any work that thread does afterwards ("Dll was not found.").
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint clientProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr process, uint desiredAccess, out IntPtr token);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    private const uint TOKEN_QUERY = 0x0008;
+
     private static PipeCaller Identify(NamedPipeServerStream server)
     {
+        IntPtr process = IntPtr.Zero, token = IntPtr.Zero;
         try
         {
-            string name = "unknown";
-            var admin = false;
-            server.RunAsClient(() =>
-            {
-                using var id = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
-                name = id.Name;
-                admin = new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator);
-            });
-            return new PipeCaller(name, admin);
+            if (!GetNamedPipeClientProcessId(server.SafePipeHandle, out var pid)) return new PipeCaller("unknown", false);
+            process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+            if (process == IntPtr.Zero || !OpenProcessToken(process, TOKEN_QUERY, out token)) return new PipeCaller($"pid {pid}", false);
+            using var id = new WindowsIdentity(token);
+            // An unelevated admin's filtered token is not in the Administrators role, matching UAC behaviour.
+            var admin = id.IsSystem || new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator);
+            return new PipeCaller($"{id.Name} (pid {pid})", admin);
         }
         catch
         {
             return new PipeCaller("unknown", false);
+        }
+        finally
+        {
+            if (token != IntPtr.Zero) CloseHandle(token);
+            if (process != IntPtr.Zero) CloseHandle(process);
         }
     }
 }

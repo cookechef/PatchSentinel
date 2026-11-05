@@ -274,7 +274,12 @@ public static class AppLog
         lock (Gate)
         {
             try { File.AppendAllText(Path.Combine(_dir, $"patchsentinel-{DateTime.Now:yyyyMMdd}.log"), line + Environment.NewLine); }
-            catch { /* logging must never break the agent */ }
+            catch (Exception ex)
+            {
+                // Logging must never break the agent, but say why it stopped where it can still be seen.
+                if (EchoToConsole) Console.Error.WriteLine($"(log write failed: {ex.Message})");
+                try { System.Diagnostics.Trace.WriteLine($"PatchSentinel log write failed: {ex}"); } catch { /* ignore */ }
+            }
         }
     }
 }

@@ -50,7 +50,7 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="3C8E6A54-1F0B-4E27-9D3A-7B5F2C9E4D10">
         <Shortcut Id="TrayShortcut" Name="PatchSentinel" Description="Patch status and legacy software"
-                  Target="[#TrayExe]" Arguments="--show" WorkingDirectory="INSTALLFOLDER" Icon="PatchSentinelIcon" />
+                  Target="[INSTALLFOLDER]PatchSentinel.Tray.exe" Arguments="--show" WorkingDirectory="INSTALLFOLDER" Icon="PatchSentinelIcon" />
         <RegistryValue Root="HKCU" Key="Software\PatchSentinel" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>

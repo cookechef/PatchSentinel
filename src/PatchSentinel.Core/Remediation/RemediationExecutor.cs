@@ -31,7 +31,11 @@ public sealed class RemediationExecutor(WingetClient? winget, bool runningAsSyst
                 reboot |= needsReboot;
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception ex) { r = new StepResult(step.Description, false, ex.Message); }
+            catch (Exception ex)
+            {
+                AppLog.Error($"Remediation step {step.Kind} failed", ex);
+                r = new StepResult(step.Description, false, $"{ex.GetType().Name}: {ex.Message}");
+            }
             results.Add(r);
             AppLog.Info($"  -> {(r.Success ? "OK" : "FAILED")}: {r.Message}");
             if (!r.Success) break; // never carry on removing things after a failed step

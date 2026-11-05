@@ -41,6 +41,10 @@ public static class Commands
     public const string Defer = "defer";
     public const string GetHistory = "get-history";
     public const string ClearManual = "clear-manual";
+    public const string CheckSelfUpdate = "check-self-update";
+    public const string GetInventory = "get-inventory";
+    public const string RecordUninstall = "record-uninstall";
+    public const string InstallSelfUpdate = "install-self-update";
 }
 
 /// <summary>An app whose automatic update keeps failing and needs updating by hand.</summary>
@@ -80,6 +84,24 @@ public sealed class HistoryView
 
 public sealed record ClearManualRequest(string Id);
 
+/// <summary>Outcome of an uninstall run by the tray (per-user) or by "psentinel uninstall" (elevated), for history.</summary>
+public sealed record UninstallRecord(string Name, string? Version, bool Success, string Message);
+
+public sealed class UninstallResultFile
+{
+    public List<UninstallRecord> Results { get; set; } = [];
+    public bool RebootRequired { get; set; }
+}
+
+public sealed class SelfUpdateCheckResult
+{
+    public string CurrentVersion { get; set; } = "";
+    public string? LatestVersion { get; set; }
+    public bool UpdateAvailable { get; set; }
+    public string Message { get; set; } = "";
+    public string? ReleaseUrl { get; set; }
+}
+
 public sealed class JobInfo
 {
     public string Id { get; set; } = "";
@@ -98,6 +120,11 @@ public sealed class AgentStatus
     public string Version { get; set; } = "";
     /// <summary>Newer PatchSentinel release found on GitHub, if any.</summary>
     public string? AvailableVersion { get; set; }
+    /// <summary>When the available version will be installed automatically (Automatic mode).</summary>
+    public DateTimeOffset? SelfUpdateInstallsAt { get; set; }
+    public DateTimeOffset? LastSelfUpdateCheckAt { get; set; }
+    public string SelfUpdateMode { get; set; } = "Automatic";
+    public string? SelfUpdateError { get; set; }
     public string? BusyWith { get; set; }
     public DateTimeOffset? LastScanAt { get; set; }
     public DateTimeOffset? NextScanAt { get; set; }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PatchSentinel.Core;
 using PatchSentinel.Core.Config;
+using PatchSentinel.Core.Ipc;
 using PatchSentinel.Core.Remediation;
 using PatchSentinel.Core.Reporting;
 using PatchSentinel.Core.Rules;
@@ -32,6 +33,7 @@ internal static class Cli
                 "scan" => await ScanAsync(args, cts.Token),
                 "updates" => await UpdatesAsync(args, cts.Token),
                 "fix" => await FixAsync(args, cts.Token),
+                "uninstall" => await UninstallAsync(args, cts.Token),
                 "rules" => await RulesAsync(args, cts.Token),
                 "self-update" => await SelfUpdateAsync(args, cts.Token),
                 "run" => await RunConsoleAsync(cts.Token),
@@ -72,6 +74,12 @@ internal static class Cli
 
           self-update [--check]        Check GitHub for a newer PatchSentinel and install it
             --repo <owner/repo>        Override the repository to update from
+
+          uninstall --key <regkey>     Uninstall app(s) by their Add/Remove Programs key (repeatable)
+          uninstall --winget-id <id>   Uninstall app(s) with winget (repeatable)
+            --name <text>              Uninstall the single app whose name matches exactly
+            --result <file.json>       Write the outcome as JSON (used by the tray app)
+            --yes                      Do not prompt
 
           rules update [--url <url>]   Download the latest EOL rules catalogue
           rules show                   Show the rules catalogue in use
@@ -237,6 +245,71 @@ internal static class Cli
             allOk &= res.Success;
         }
         return allOk ? ExitClean : ExitError;
+    }
+
+    /// <summary>
+    /// Uninstalls apps. Machine-wide apps need administrator rights, so the tray app runs this elevated (UAC prompt)
+    /// rather than asking the SYSTEM service; that way a standard user cannot remove software without an admin.
+    /// The uninstall command is always read from this machine's registry, never taken from the caller.
+    /// </summary>
+    private static async Task<int> UninstallAsync(string[] args, CancellationToken ct)
+    {
+        var keys = Values(args, "--key");
+        var wingetIds = Values(args, "--winget-id");
+        var name = Value(args, "--name");
+        var resultFile = Value(args, "--result");
+        if (keys.Count == 0 && wingetIds.Count == 0 && name is null) return Usage("Specify --key, --winget-id or --name.");
+        if (wingetIds.Any(i => !WingetClient.IsValidId(i))) return Usage("Invalid winget id.");
+        if (!Platform.IsElevated) { Console.Error.WriteLine("Uninstalling needs administrator rights: run from an elevated prompt."); return ExitError; }
+
+        var warnings = new List<string>();
+        var inventory = Core.Inventory.RegistryInventory.Collect(allLoadedUserHives: Platform.IsSystem, Platform.CurrentUserSid, warnings);
+        var items = inventory.Where(i => (i.RegistryKey is not null && keys.Contains(i.RegistryKey, StringComparer.OrdinalIgnoreCase))
+                                         || (name is not null && i.Name.Equals(name, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        var plan = new List<(string Name, string? Version, List<RemediationStep> Steps)>();
+        foreach (var i in items)
+            plan.Add((i.Name, i.Version, RemediationPlanner.RegistryUninstallSteps(i)
+                .Select(s => s with { RequiresUserContext = false }).ToList())); // already running as the elevated user
+        foreach (var id in wingetIds)
+            plan.Add((id, null, [new RemediationStep { Kind = StepKind.WingetUninstall, Target = id, Description = $"Uninstall {id} with winget" }]));
+        foreach (var k in keys.Where(k => !items.Any(i => string.Equals(i.RegistryKey, k, StringComparison.OrdinalIgnoreCase))))
+            Console.WriteLine($"Not found (already removed?): {k}");
+
+        if (plan.Count == 0) { WriteResult(resultFile, new UninstallResultFile()); Console.WriteLine("Nothing to uninstall."); return ExitClean; }
+
+        Console.WriteLine("PatchSentinel will uninstall:");
+        foreach (var p in plan) Console.WriteLine($"  {p.Name} {p.Version}{(p.Steps.Count == 0 ? "  (no uninstaller registered - skipped)" : "")}");
+        if (!Has(args, "--yes"))
+        {
+            if (Console.IsInputRedirected) { Console.Error.WriteLine("Add --yes to run non-interactively."); return ExitUsage; }
+            Console.Write("Proceed? [y/N] ");
+            if (!string.Equals(Console.ReadLine()?.Trim(), "y", StringComparison.OrdinalIgnoreCase)) return ExitClean;
+        }
+
+        var executor = new RemediationExecutor(WingetClient.TryCreate(Platform.IsSystem), Platform.IsSystem);
+        var outcome = new UninstallResultFile();
+        foreach (var p in plan)
+        {
+            if (p.Steps.Count == 0) { outcome.Results.Add(new UninstallRecord(p.Name, p.Version, false, "No uninstaller is registered; remove it manually.")); continue; }
+            Console.Write($"Uninstalling {p.Name}... ");
+            var finding = new Finding { Id = "uninstall", Title = p.Name };
+            var action = new RemediationAction { Id = "uninstall", Label = $"Uninstall {p.Name}", Steps = p.Steps };
+            var res = await executor.ExecuteAsync(finding, action, _ => true, ct);
+            var msg = string.Join("; ", res.Steps.Select(s => s.Message));
+            Console.WriteLine(res.Success ? "done" : $"failed: {msg}");
+            outcome.Results.Add(new UninstallRecord(p.Name, p.Version, res.Success, res.Success ? (res.RebootRequired ? "Uninstalled (restart required)" : "Uninstalled") : msg));
+            outcome.RebootRequired |= res.RebootRequired;
+        }
+        WriteResult(resultFile, outcome);
+        return outcome.Results.All(r => r.Success) ? ExitClean : ExitError;
+    }
+
+    private static void WriteResult(string? path, UninstallResultFile result)
+    {
+        if (path is null) return;
+        try { File.WriteAllText(path, JsonSerializer.Serialize(result, Json.Options)); }
+        catch (Exception ex) { Console.Error.WriteLine($"Could not write result file: {ex.Message}"); }
     }
 
     private static async Task<int> RulesAsync(string[] args, CancellationToken ct)

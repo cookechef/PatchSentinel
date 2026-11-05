@@ -48,6 +48,18 @@
                             <Button x:Name="ExportButton" Content="Export report..." Click="Export_Click"/>
                         </WrapPanel>
                         <TextBlock x:Name="WarningsText" Margin="0,14,0,0" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                        <Border x:Name="SelfUpdateCard" Style="{StaticResource Card}" Margin="0,20,0,0" HorizontalAlignment="Left" MinWidth="460">
+                            <StackPanel>
+                                <TextBlock Text="PatchSentinel updates" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SelfUpdateText" TextWrapping="Wrap" Margin="0,4,0,10" Foreground="{StaticResource Muted}"
+                                           Text="Checking..."/>
+                                <WrapPanel>
+                                    <Button x:Name="CheckSelfUpdateButton" Content="Check for PatchSentinel updates" Click="CheckSelfUpdate_Click"/>
+                                    <Button x:Name="InstallSelfUpdateButton" Content="Install update now" Click="InstallSelfUpdate_Click"
+                                            Style="{StaticResource Primary}" Visibility="Collapsed"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -56,6 +68,15 @@
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
                                Text="This software no longer gets security fixes (or is missing patches) and will be reported by vulnerability scans. Select Fix to see which apps still use it and the safest way to remove or upgrade it."/>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Severity:" Foreground="{StaticResource Muted}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <Border Background="#B42318" CornerRadius="8" Padding="8,0" Margin="0,0,6,0"><TextBlock Text="Critical" Foreground="White" FontSize="11"/></Border>
+                        <Border Background="#F04438" CornerRadius="8" Padding="8,0" Margin="0,0,6,0"><TextBlock Text="High" Foreground="White" FontSize="11"/></Border>
+                        <Border Background="#F79009" CornerRadius="8" Padding="8,0" Margin="0,0,6,0"><TextBlock Text="Medium" Foreground="White" FontSize="11"/></Border>
+                        <Border Background="#12B76A" CornerRadius="8" Padding="8,0" Margin="0,0,12,0"><TextBlock Text="Low" Foreground="White" FontSize="11"/></Border>
+                        <TextBlock Foreground="{StaticResource Muted}" VerticalAlignment="Center" FontSize="11"
+                                   Text="Critical/High: end of life now - remove or replace.  Medium: end of life soon or missing patches."/>
+                    </StackPanel>
                     <DataGrid x:Name="FindingsGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" ClipboardCopyMode="IncludeHeader"
                               CanUserAddRows="False" SelectionMode="Single" GridLinesVisibility="Horizontal"
                               HorizontalGridLinesBrush="#E6E6E6" Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0">
@@ -67,9 +88,50 @@
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="80"/>
+                            <DataGridTemplateColumn Header="Severity" Width="92" SortMemberPath="SeverityRank">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="Pill" CornerRadius="9" Padding="9,1" Margin="2,0" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#E4E7EC">
+                                            <TextBlock x:Name="PillText" Text="{Binding Severity}" FontWeight="SemiBold" FontSize="12" Foreground="#344054"/>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                                                <Setter TargetName="Pill" Property="Background" Value="#B42318"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Severity}" Value="High">
+                                                <Setter TargetName="Pill" Property="Background" Value="#F04438"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Severity}" Value="Medium">
+                                                <Setter TargetName="Pill" Property="Background" Value="#F79009"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Severity}" Value="Low">
+                                                <Setter TargetName="Pill" Property="Background" Value="#12B76A"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Severity}" Value="Info">
+                                                <Setter TargetName="Pill" Property="Background" Value="#D1E9FF"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="#175CD3"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Software" Binding="{Binding Title}" Width="2*"/>
-                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="2*"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="2*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Kind}" Value="EndOfLife"><Setter Property="Foreground" Value="#B42318"/></DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind}" Value="NearingEndOfLife"><Setter Property="Foreground" Value="#B54708"/></DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind}" Value="OutdatedPatch"><Setter Property="Foreground" Value="#B54708"/></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTextColumn Header="Installed" Binding="{Binding Versions}" Width="1.6*"/>
                             <DataGridTextColumn Header="Apps using it" Binding="{Binding Dependents}" Width="1.2*"/>
                             <DataGridTemplateColumn Header="" Width="90">
@@ -99,6 +161,7 @@
                         <Button x:Name="InstallSelectedButton" Content="Install ticked" Click="InstallSelected_Click"/>
                         <Button Content="Install all (except excluded)" Click="UpdateAll_Click" Style="{StaticResource Primary}"/>
                         <Button x:Name="SaveExclusionsButton" Content="Save exclusions" Click="SaveExclusions_Click"/>
+                        <Button Content="Uninstall ticked..." Click="UninstallTickedUpdates_Click" ToolTip="Remove the ticked apps instead of updating them"/>
                         <Button x:Name="UserUpdatesButton" Content="Update my per-user apps" Click="UserUpdates_Click"
                                 ToolTip="Runs winget in your own account for apps installed only for you"/>
                     </WrapPanel>
@@ -115,6 +178,7 @@
                                 <MenuItem Header="Copy application name" Click="CopyColumn_Click" Tag="Name"/>
                                 <MenuItem Header="Copy package ID" Click="CopyColumn_Click" Tag="Id"/>
                                 <Separator/>
+                                <MenuItem Header="Uninstall this app..." Click="UninstallSelectedUpdates_Click"/>
                                 <MenuItem Header="Remove from manual updates list" Click="ClearManual_Click"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
@@ -140,6 +204,58 @@
                             <DataGridTextColumn Header="Installed" Binding="{Binding Installed}" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Available" Binding="{Binding Available}" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="1.4*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Installed apps" x:Name="AppsTab">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Everything in Add/Remove Programs for all users on this PC. Tick apps to uninstall them (you will be asked to approve with an administrator account), right-click to copy, or export the list."/>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox x:Name="AppsSearch" Width="260" Padding="3" TextChanged="AppsSearch_TextChanged"/>
+                        <CheckBox x:Name="AppsShowSystem" Content="Show hidden system components" Margin="16,0,0,0" VerticalAlignment="Center" Click="AppsFilter_Click"/>
+                        <TextBlock x:Name="AppsCountText" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                    </StackPanel>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Content="Refresh" Click="RefreshApps_Click"/>
+                        <Button x:Name="UninstallAppsButton" Content="Uninstall ticked..." Click="UninstallApps_Click"/>
+                        <Button Content="Export list (CSV)..." Click="ExportApps_Click"/>
+                        <TextBlock x:Name="AppsResultText" VerticalAlignment="Center" Margin="8,0,0,8" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="AppsGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" ClipboardCopyMode="IncludeHeader"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E6E6E6"
+                              Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                <MenuItem Header="Copy application name" Click="CopyColumn_Click" Tag="Name"/>
+                                <MenuItem Header="Copy version" Click="CopyColumn_Click" Tag="Version"/>
+                                <MenuItem Header="Copy publisher" Click="CopyColumn_Click" Tag="Publisher"/>
+                                <MenuItem Header="Copy uninstall command" Click="CopyColumn_Click" Tag="UninstallCommand"/>
+                                <Separator/>
+                                <MenuItem Header="Uninstall selected..." Click="UninstallSelectedApps_Click"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="" Width="34">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanUninstall}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Tick to uninstall"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Application" Binding="{Binding Name}" IsReadOnly="True" Width="2.4*"/>
+                            <DataGridTextColumn Header="Version" Binding="{Binding Version}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Publisher" Binding="{Binding Publisher}" IsReadOnly="True" Width="1.6*"/>
+                            <DataGridTextColumn Header="Installed" Binding="{Binding InstallDate}" IsReadOnly="True" Width="90" SortMemberPath="InstallDateSort"/>
+                            <DataGridTextColumn Header="Size (MB)" Binding="{Binding Size}" IsReadOnly="True" Width="75" SortMemberPath="SizeSort"/>
+                            <DataGridTextColumn Header="Installed for" Binding="{Binding Scope}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Arch" Binding="{Binding Arch}" IsReadOnly="True" Width="50"/>
+                            <DataGridTextColumn Header="Uninstall" Binding="{Binding UninstallMethod}" IsReadOnly="True" Width="1.1*"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -196,7 +312,17 @@
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*"/>
                             <DataGridTextColumn Header="From" Binding="{Binding From}" Width="*"/>
                             <DataGridTextColumn Header="To" Binding="{Binding To}" Width="*"/>
-                            <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="70"/>
+                            <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="70">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Foreground" Value="#067647"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Result}" Value="Failed"><Setter Property="Foreground" Value="#B42318"/></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTextColumn Header="Details" Binding="{Binding Message}" Width="3*"/>
                             <DataGridTextColumn Header="Started by" Binding="{Binding Trigger}" Width="1.2*"/>
                         </DataGrid.Columns>

@@ -36,6 +36,9 @@ public sealed record InstalledItem
     public string? RegistryKey { get; init; }
     public string? UserSid { get; init; }
     public bool IsSystemComponent { get; init; }
+    public DateOnly? InstallDate { get; init; }
+    /// <summary>Size reported by the installer (EstimatedSize), in MB.</summary>
+    public double? SizeMB { get; init; }
 
     [JsonIgnore]
     public string Key => $"{Source}|{Name}|{Version}|{Architecture}|{Scope}|{UserSid}|{InstallLocation}";
@@ -143,6 +146,8 @@ public sealed record UpdateCandidate
     /// <summary>Automatic updates of this app keep failing; it is skipped by scheduled runs until updated by hand or a retry succeeds.</summary>
     public bool NeedsManualUpdate { get; init; }
     public string? ManualReason { get; init; }
+    /// <summary>Result of the most recent failed automatic update attempt, e.g. "Failed 05 Nov 13:29 (1 of 2): 0x8A15008E".</summary>
+    public string? LastAttempt { get; init; }
     /// <summary>winget truncated the package id in its table output; it cannot be targeted safely.</summary>
     public bool IdTruncated { get; init; }
     /// <summary>Package is pinned or requires explicit targeting, so winget will not upgrade it with --all.</summary>

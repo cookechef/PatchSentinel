@@ -42,9 +42,15 @@ internal sealed class UpdateTracker
     public List<UpdateCandidate> Annotate(IEnumerable<UpdateCandidate> updates)
     {
         lock (_gate)
-            return updates.Select(u => _manual.TryGetValue(u.Id, out var m) && m.Flagged
-                ? u with { NeedsManualUpdate = true, ManualReason = m.LastError }
-                : u).ToList();
+            return updates.Select(u =>
+            {
+                if (!_manual.TryGetValue(u.Id, out var m)) return u;
+                var attempt = $"Failed {m.LastFailedAt.LocalDateTime:dd MMM HH:mm}" +
+                              (m.Flagged ? $" ({m.Failures} times)" : $" (attempt {m.Failures} of {FailuresBeforeManual})") + $": {m.LastError}";
+                return m.Flagged
+                    ? u with { NeedsManualUpdate = true, ManualReason = m.LastError, LastAttempt = attempt }
+                    : u with { LastAttempt = attempt };
+            }).ToList();
     }
 
     public bool IsFlagged(string id) { lock (_gate) return _manual.TryGetValue(id, out var m) && m.Flagged; }

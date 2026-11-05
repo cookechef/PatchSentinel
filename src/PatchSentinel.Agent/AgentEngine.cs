@@ -17,6 +17,7 @@ internal sealed class AgentState
     public DateTimeOffset? LastRulesCheckAt { get; set; }
     public DateTimeOffset? LastSelfUpdateCheckAt { get; set; }
     public string? AvailableVersion { get; set; }
+    public DateTimeOffset? AvailableSince { get; set; }
     public string? LastSelfUpdateAttemptVersion { get; set; }
     public DateTimeOffset? LastSelfUpdateAttemptAt { get; set; }
     public DateTimeOffset? DeferredUntil { get; set; }
@@ -51,6 +52,8 @@ internal sealed class AgentEngine
         _state = Load<AgentState>(AppPaths.AgentStateFile) ?? new AgentState();
         _lastScan = Load<ScanResult>(AppPaths.LastScanFile);
         _tracker = new UpdateTracker();
+        // The pending release is held in memory; re-check soon after a restart so it is not forgotten.
+        if (_state.AvailableVersion is not null) _state.LastSelfUpdateCheckAt = null;
         SaveState();
 
         var pipe = new PipeServer(HandleAsync);
@@ -96,45 +99,100 @@ internal sealed class AgentEngine
             await RunJobAsync("Scanning", "scan", ScanAsync, ct);
     }
 
-    /// <summary>Daily check of GitHub Releases; installs a newer version when the agent is idle. Returns true if an update was started.</summary>
+    private static readonly TimeSpan SelfUpdateCheckInterval = TimeSpan.FromHours(6);
+    private ReleaseInfo? _pendingRelease;
+    private string? _selfUpdateError;
+
+    /// <summary>
+    /// Checks GitHub Releases every few hours. A newer version is reported to the tray straight away; in Automatic
+    /// mode it is installed once the grace period has passed and the agent is idle. Returns true if an install started.
+    /// </summary>
     private async Task<bool> CheckSelfUpdateAsync(DateTimeOffset now, CancellationToken ct)
     {
-        var repo = _settings.EffectiveUpdateRepo;
-        if (!_settings.Settings.AutoUpdateAgent || !SelfUpdater.IsValidRepo(repo)) return false;
-        if (now - _startedAt < TimeSpan.FromMinutes(10)) return false; // let a freshly started agent settle first
-        if (_state.LastSelfUpdateCheckAt is { } last && now - last < TimeSpan.FromHours(24)) return false;
-        _state.LastSelfUpdateCheckAt = now;
-        SaveState();
+        var mode = _settings.EffectiveSelfUpdateMode;
+        if (mode == SelfUpdateMode.Off || !SelfUpdater.IsValidRepo(_settings.EffectiveUpdateRepo)) return false;
+        if (now - _startedAt < TimeSpan.FromMinutes(3)) return false; // let a freshly started agent settle first
 
-        ReleaseInfo? latest;
-        try { latest = await SelfUpdater.GetLatestAsync(repo!, ct); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { AppLog.Warn($"Self-update check against {repo} failed: {ex.Message}"); return false; }
+        if (_state.LastSelfUpdateCheckAt is null || now - _state.LastSelfUpdateCheckAt.Value >= SelfUpdateCheckInterval)
+            await CheckLatestAsync(ct);
 
-        if (latest is null || !SelfUpdater.IsNewer(latest.Version, AppPaths.Version))
-        {
-            _state.AvailableVersion = null;
-            SaveState();
-            return false;
-        }
-        _state.AvailableVersion = latest.Version;
-        SaveState();
-        AppLog.Info($"PatchSentinel {latest.Version} is available ({latest.PageUrl}).");
-
-        // Do not retry a version that failed to install within the last day (the next daily check retries it).
-        if (_state.LastSelfUpdateAttemptVersion == latest.Version && _state.LastSelfUpdateAttemptAt is { } at && now - at < TimeSpan.FromHours(23)) return false;
-        return await RunJobAsync($"Updating PatchSentinel to {latest.Version}", "self-update", c => SelfUpdateAsync(latest, c), ct);
+        if (mode != SelfUpdateMode.Automatic || _pendingRelease is null || SelfUpdateInstallsAt(now) is not { } due || now < due) return false;
+        // Do not retry a version that failed to install within the last day.
+        if (_state.LastSelfUpdateAttemptVersion == _pendingRelease.Version && _state.LastSelfUpdateAttemptAt is { } at && now - at < TimeSpan.FromHours(23)) return false;
+        var release = _pendingRelease;
+        return await RunJobAsync($"Updating PatchSentinel to {release.Version}", "self-update", c => SelfUpdateAsync(release, "Automatic", c), ct);
     }
 
-    private async Task<JobInfo> SelfUpdateAsync(ReleaseInfo latest, CancellationToken ct)
+    /// <summary>Asks GitHub for the latest release and records whether it is newer.</summary>
+    private async Task<SelfUpdateCheckResult> CheckLatestAsync(CancellationToken ct)
+    {
+        var repo = _settings.EffectiveUpdateRepo;
+        var result = new SelfUpdateCheckResult { CurrentVersion = AppPaths.Version };
+        _state.LastSelfUpdateCheckAt = DateTimeOffset.Now;
+        try
+        {
+            if (!SelfUpdater.IsValidRepo(repo)) throw new InvalidOperationException("No update repository is configured for this build.");
+            var latest = await SelfUpdater.GetLatestAsync(repo!, ct);
+            _selfUpdateError = null;
+            result.LatestVersion = latest?.Version;
+            result.ReleaseUrl = latest?.PageUrl;
+            if (latest is not null && SelfUpdater.IsNewer(latest.Version, AppPaths.Version))
+            {
+                if (_pendingRelease?.Version != latest.Version)
+                {
+                    _state.AvailableSince = DateTimeOffset.Now;
+                    AppLog.Info($"PatchSentinel {latest.Version} is available ({latest.PageUrl}).");
+                }
+                _pendingRelease = latest;
+                _state.AvailableVersion = latest.Version;
+                result.UpdateAvailable = true;
+                result.Message = $"PatchSentinel {latest.Version} is available (you have {AppPaths.Version}).";
+            }
+            else
+            {
+                _pendingRelease = null;
+                _state.AvailableVersion = null;
+                _state.AvailableSince = null;
+                result.Message = latest is null ? "No published releases were found." : $"PatchSentinel {AppPaths.Version} is the latest version.";
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _selfUpdateError = ex.Message;
+            result.Message = $"Could not check for updates: {ex.Message}";
+            AppLog.Warn($"Self-update check against {repo} failed: {ex.Message}");
+        }
+        SaveState();
+        return result;
+    }
+
+    private DateTimeOffset? SelfUpdateInstallsAt(DateTimeOffset now)
+    {
+        if (_settings.EffectiveSelfUpdateMode != SelfUpdateMode.Automatic || _pendingRelease is null) return null;
+        var since = _state.AvailableSince ?? now;
+        var due = since.AddMinutes(Math.Max(0, _settings.Settings.SelfUpdateGraceMinutes));
+        return due < now ? now : due;
+    }
+
+    private async Task<JobInfo> SelfUpdateAsync(ReleaseInfo latest, string trigger, CancellationToken ct)
     {
         _state.LastSelfUpdateAttemptVersion = latest.Version;
         _state.LastSelfUpdateAttemptAt = DateTimeOffset.Now;
         SaveState();
-        var msi = await SelfUpdater.DownloadAndVerifyAsync(latest, ct);
-        AppLog.Info($"Downloaded and verified {latest.MsiName} (sha256 {latest.Sha256}); starting silent upgrade. The service will restart.");
-        _tracker.RecordEvent(new HistoryEntry { At = DateTimeOffset.Now, Kind = "Self-update", Name = "PatchSentinel", From = AppPaths.Version, To = latest.Version, Success = true, Message = "Verified installer downloaded; upgrade started", Trigger = "Automatic" });
-        SelfUpdater.LaunchInstaller(msi);
-        return new JobInfo { Success = true, Message = $"Installing PatchSentinel {latest.Version}; the agent will restart." };
+        try
+        {
+            var msi = await SelfUpdater.DownloadAndVerifyAsync(latest, ct);
+            AppLog.Info($"Downloaded and verified {latest.MsiName} (sha256 {latest.Sha256}); starting silent upgrade. The service will restart.");
+            _tracker.RecordEvent(new HistoryEntry { At = DateTimeOffset.Now, Kind = "Self-update", Name = "PatchSentinel", From = AppPaths.Version, To = latest.Version, Success = true, Message = "Verified installer downloaded; upgrade started", Trigger = trigger });
+            SelfUpdater.LaunchInstaller(msi);
+            return new JobInfo { Success = true, Message = $"Installing PatchSentinel {latest.Version}; PatchSentinel will restart in a moment." };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _selfUpdateError = ex.Message;
+            _tracker.RecordEvent(new HistoryEntry { At = DateTimeOffset.Now, Kind = "Self-update", Name = "PatchSentinel", From = AppPaths.Version, To = latest.Version, Success = false, Message = ex.Message, Trigger = trigger });
+            throw;
+        }
     }
 
     private DateTimeOffset? NextScanAt(DateTimeOffset now)
@@ -365,6 +423,41 @@ internal sealed class AgentEngine
                     return Task.FromResult(Started(StartBackgroundJob($"Fixing {finding.Title}", "remediate", c => RemediateAsync(finding, action, caller.Name, c))));
                 }
 
+                case Commands.CheckSelfUpdate:
+                {
+                    if (_settings.EffectiveSelfUpdateMode == SelfUpdateMode.Off && !caller.IsAdmin)
+                        return Task.FromResult(PipeResponse.Fail("PatchSentinel updates are managed by your administrator."));
+                    return CheckSelfUpdateForPipeAsync();
+                }
+
+                case Commands.InstallSelfUpdate:
+                {
+                    if (_settings.EffectiveSelfUpdateMode == SelfUpdateMode.Off && !caller.IsAdmin)
+                        return Task.FromResult(PipeResponse.Fail("PatchSentinel updates are managed by your administrator."));
+                    var release = _pendingRelease;
+                    if (release is null) return Task.FromResult(PipeResponse.Fail("No PatchSentinel update is waiting. Click 'Check for PatchSentinel updates' first."));
+                    return Task.FromResult(Started(StartBackgroundJob($"Updating PatchSentinel to {release.Version}", "self-update", c => SelfUpdateAsync(release, caller.Name, c))));
+                }
+
+                case Commands.GetInventory:
+                {
+                    List<InstalledItem> inv;
+                    lock (_gate) inv = _lastScan?.Inventory.Where(i => i.Source == ItemSource.Registry).ToList() ?? [];
+                    return Task.FromResult(PipeResponse.Success(inv));
+                }
+
+                case Commands.RecordUninstall:
+                {
+                    var records = Payload<List<UninstallRecord>>(req) ?? [];
+                    foreach (var r in records.Take(200))
+                        _tracker.RecordEvent(new HistoryEntry
+                        {
+                            At = DateTimeOffset.Now, Kind = "Uninstall", Name = Trunc(r.Name, 200), From = Trunc(r.Version, 50),
+                            Success = r.Success, Message = Trunc(r.Message, 500), Trigger = caller.Name,
+                        });
+                    return Task.FromResult(PipeResponse.Success());
+                }
+
                 case Commands.GetHistory:
                     return Task.FromResult(PipeResponse.Success(_tracker.View()));
 
@@ -441,6 +534,15 @@ internal sealed class AgentEngine
         }
     }
 
+    private async Task<PipeResponse> CheckSelfUpdateForPipeAsync()
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
+        cts.CancelAfter(TimeSpan.FromSeconds(25));
+        return PipeResponse.Success(await CheckLatestAsync(cts.Token));
+    }
+
+    private static string Trunc(string? s, int max) => s is null ? "" : s.Length <= max ? s : s[..max];
+
     private static PipeResponse Started(string? jobId) =>
         jobId is null ? PipeResponse.Fail("The agent is busy with another task; try again in a moment.") : PipeResponse.Success(new JobStarted(jobId));
 
@@ -456,6 +558,10 @@ internal sealed class AgentEngine
             {
                 Version = AppPaths.Version,
                 AvailableVersion = _state.AvailableVersion is { } av && SelfUpdater.IsNewer(av, AppPaths.Version) ? av : null,
+                SelfUpdateInstallsAt = SelfUpdateInstallsAt(now),
+                LastSelfUpdateCheckAt = _state.LastSelfUpdateCheckAt,
+                SelfUpdateMode = _settings.EffectiveSelfUpdateMode.ToString(),
+                SelfUpdateError = _selfUpdateError,
                 BusyWith = _busyWith,
                 LastScanAt = _state.LastScanAt,
                 NextScanAt = NextScanAt(now),

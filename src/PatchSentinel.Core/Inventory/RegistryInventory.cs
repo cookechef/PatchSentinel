@@ -88,6 +88,8 @@ public static class RegistryInventory
                     ProductCode = isMsi && GuidKey.IsMatch(name) ? name.ToUpperInvariant() : null,
                     RegistryKey = $@"{label}\{UninstallPath}\{name}",
                     IsSystemComponent = GetInt(k, "SystemComponent") == 1,
+                    InstallDate = ParseInstallDate(k.GetValue("InstallDate") as string),
+                    SizeMB = GetInt(k, "EstimatedSize") is var kb and > 0 ? Math.Round(kb / 1024.0, 1) : null,
                 });
             }
             catch
@@ -95,6 +97,14 @@ public static class RegistryInventory
                 // One bad key must not stop the inventory.
             }
         }
+    }
+
+    private static DateOnly? ParseInstallDate(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        s = s.Trim();
+        if (DateOnly.TryParseExact(s, "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d)) return d;
+        return DateOnly.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out d) ? d : null;
     }
 
     private static int GetInt(RegistryKey k, string name) => k.GetValue(name) switch

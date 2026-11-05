@@ -22,10 +22,44 @@ public sealed class FindingRow
 {
     public Finding Finding { get; init; } = new();
     public string Severity { get; init; } = "";
+    public int SeverityRank => (int)Finding.Severity;
+    public string Kind => Finding.Kind.ToString();
     public string Title { get; init; } = "";
     public string Status { get; init; } = "";
     public string Versions { get; init; } = "";
     public string Dependents { get; init; } = "";
+}
+
+public sealed class AppRow : INotifyPropertyChanged
+{
+    private bool _selected;
+    public InstalledItem Item { get; init; } = new();
+    public string Name => Item.Name;
+    public string Version => Item.Version ?? "";
+    public string Publisher => Item.Publisher ?? "";
+    public string InstallDate => Item.InstallDate?.ToString("dd MMM yyyy") ?? "";
+    public int InstallDateSort => Item.InstallDate?.DayNumber ?? 0;
+    public string Size => Item.SizeMB?.ToString("0.#") ?? "";
+    public double SizeSort => Item.SizeMB ?? 0;
+    public string Scope { get; init; } = "";
+    public string Arch => Item.Architecture ?? "";
+    public string UninstallMethod { get; init; } = "";
+    public string UninstallCommand => Item.QuietUninstallString ?? Item.UninstallString ?? "";
+    public bool CanUninstall { get; init; }
+
+    public bool Selected
+    {
+        get => _selected;
+        set
+        {
+            if (value && !CanUninstall) value = false;
+            if (_selected == value) return;
+            _selected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Selected)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 public sealed class HistoryRow
@@ -103,6 +137,9 @@ public partial class MainWindow : Window
     private bool _localMode;
     private bool _loadingScan;
     private HistoryView? _history;
+    private List<InstalledItem> _inventory = [];
+    private List<AppRow> _appRows = [];
+    private bool _inventoryLoaded;
     private string? _lastSeenJob;
 
     public MainWindow(TrayController tray)
@@ -113,6 +150,10 @@ public partial class MainWindow : Window
         _tray.StatusChanged += OnStatusChanged;
         Closed += (_, _) => _tray.StatusChanged -= OnStatusChanged;
         Loaded += async (_, _) => await RefreshAllAsync();
+        Tabs.SelectionChanged += async (_, e) =>
+        {
+            if (e.OriginalSource == Tabs && Tabs.SelectedItem == AppsTab && !_inventoryLoaded) await LoadInventoryAsync();
+        };
     }
 
     private CheckBox[] DayBoxes => [DaySun, DayMon, DayTue, DayWed, DayThu, DayFri, DaySat]; // index == DayOfWeek
@@ -123,6 +164,7 @@ public partial class MainWindow : Window
         "updates" => UpdatesTab,
         "schedule" => ScheduleTab,
         "history" => HistoryTab,
+        "apps" => AppsTab,
         _ => OverviewTab,
     };
 
@@ -195,12 +237,16 @@ public partial class MainWindow : Window
             StatusBarText.Text = _localMode && _scan is not null ? $"Local read-only scan at {_scan.ScannedAt.LocalDateTime:HH:mm}" : "Agent not reachable";
             ScheduleSummaryText.Text = "";
             DeferButton.IsEnabled = false;
+            CheckSelfUpdateButton.IsEnabled = false;
+            InstallSelfUpdateButton.Visibility = Visibility.Collapsed;
+            SelfUpdateText.Text = $"You have version {AppPaths.Version}. Update checks need the PatchSentinel Agent service.";
             if (_localMode && _scan is not null) RenderCounts(_scan.Counts);
             return;
         }
 
         RenderCounts(st.Counts);
         RenderLastUpdateRun(st);
+        RenderSelfUpdate(st);
         var c = st.Counts;
         if (busy)
         {
@@ -266,6 +312,48 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RenderSelfUpdate(AgentStatus st)
+    {
+        var busy = st.BusyWith is not null;
+        var off = st.SelfUpdateMode == "Off";
+        CheckSelfUpdateButton.IsEnabled = !busy && !off;
+        InstallSelfUpdateButton.Visibility = st.AvailableVersion is not null && !off ? Visibility.Visible : Visibility.Collapsed;
+        InstallSelfUpdateButton.IsEnabled = !busy;
+        InstallSelfUpdateButton.Content = st.AvailableVersion is { } v ? $"Install {v} now" : "Install update now";
+
+        var checkedAt = st.LastSelfUpdateCheckAt is { } c ? $" Last checked {c.LocalDateTime:dd MMM HH:mm}." : "";
+        SelfUpdateText.Text = off ? $"You have version {st.Version}. Automatic updates of PatchSentinel are turned off by your administrator."
+            : st.BusyWith?.StartsWith("Updating PatchSentinel", StringComparison.Ordinal) == true ? $"{st.BusyWith}... PatchSentinel will restart by itself."
+            : st.AvailableVersion is { } av
+                ? $"Version {av} is available (you have {st.Version}). " + (st.SelfUpdateInstallsAt is { } at
+                    ? $"It will install automatically at {at.LocalDateTime:HH:mm}, or click Install now."
+                    : "Click Install now to update.") + checkedAt
+            : st.SelfUpdateError is { } err ? $"You have version {st.Version}. The last update check failed: {err}"
+            : $"You have the latest version ({st.Version}).{checkedAt}";
+    }
+
+    private async void CheckSelfUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        CheckSelfUpdateButton.IsEnabled = false;
+        SelfUpdateText.Text = "Checking GitHub for a newer version...";
+        try
+        {
+            var r = await _tray.Client.SendAsync(Commands.CheckSelfUpdate, timeout: TimeSpan.FromSeconds(40));
+            var res = r.As<SelfUpdateCheckResult>();
+            await _tray.PollAsync();
+            SelfUpdateText.Text = r.Ok ? res?.Message ?? "" : r.Error ?? "The check failed.";
+        }
+        catch (Exception ex) { SelfUpdateText.Text = $"Could not reach the PatchSentinel agent: {ex.Message}"; }
+        finally { CheckSelfUpdateButton.IsEnabled = true; }
+    }
+
+    private async void InstallSelfUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show(this, "Install the new version of PatchSentinel now? It takes a minute; the app will close and reopen by itself.",
+                "Update PatchSentinel", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        await _tray.InstallSelfUpdateAsync();
+    }
+
     private void RenderCounts(ScanCounts c)
     {
         EolCount.Text = c.EndOfLife.ToString();
@@ -302,7 +390,8 @@ public partial class MainWindow : Window
                 Excluded = u.Excluded,
                 ExclusionsAllowed = _settings?.AllowUserExclusions ?? true,
                 Note = u.ManagedByWindows ? "Updated by Windows / Microsoft Store"
-                    : u.NeedsManualUpdate ? $"Update manually - automatic update keeps failing ({u.ManualReason})"
+                    : u.NeedsManualUpdate ? $"Update manually - {u.LastAttempt}"
+                    : u.LastAttempt is not null ? u.LastAttempt
                     : u.ExcludedByPolicy ? "Excluded by your administrator"
                     : pattern is not null ? $"Excluded by pattern {pattern}"
                     : u.RequiresExplicit ? "Pinned - update manually"
@@ -399,6 +488,138 @@ public partial class MainWindow : Window
         };
         File.WriteAllText(dlg.FileName, content);
         StatusBarText.Text = $"Report saved to {dlg.FileName}";
+    }
+
+    // ---------------- installed apps ----------------
+
+    private async Task LoadInventoryAsync()
+    {
+        AppsCountText.Text = "Loading...";
+        try
+        {
+            if (_tray.AgentReachable)
+                _inventory = await _tray.Client.GetAsync<List<InstalledItem>>(Commands.GetInventory, timeout: TimeSpan.FromSeconds(30)) ?? new List<InstalledItem>();
+            if (_inventory.Count == 0)
+            {
+                // Agent not running or no scan yet: read this user's view of the registry directly.
+                _inventory = await Task.Run(() => Core.Inventory.RegistryInventory.Collect(false, Platform.CurrentUserSid, new List<string>()));
+            }
+            _inventoryLoaded = true;
+            RenderInventory();
+        }
+        catch (Exception ex) { AppsCountText.Text = $"Could not load apps: {ex.Message}"; }
+    }
+
+    private void RenderInventory()
+    {
+        var sid = Platform.CurrentUserSid;
+        var showSystem = AppsShowSystem.IsChecked == true;
+        var q = AppsSearch.Text.Trim();
+        _appRows = _inventory
+            .Where(i => showSystem || !i.IsSystemComponent)
+            .Where(i => q.Length == 0 || i.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || (i.Publisher?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) || (i.Version?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
+            .GroupBy(i => (i.Name, i.Version, i.Scope, i.UserSid)).Select(g => g.First())
+            .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(i =>
+            {
+                var steps = Core.Remediation.RemediationPlanner.RegistryUninstallSteps(i);
+                var otherUser = i.Scope == InstallScope.User && i.UserSid is not null && i.UserSid != sid;
+                var method = otherUser ? "Other user (sign in as them)"
+                    : steps.Count == 0 ? "No uninstaller"
+                    : steps[0].Kind == StepKind.InteractiveUninstall ? "Opens its uninstaller"
+                    : "Silent";
+                return new AppRow
+                {
+                    Item = i,
+                    Scope = i.Scope == InstallScope.Machine ? "All users" : otherUser ? "Another user" : "You",
+                    UninstallMethod = method,
+                    CanUninstall = steps.Count > 0 && !otherUser,
+                };
+            }).ToList();
+        AppsGrid.ItemsSource = _appRows;
+        AppsCountText.Text = $"{_appRows.Count} app(s){(q.Length > 0 ? " matching" : "")}";
+    }
+
+    private void AppsSearch_TextChanged(object sender, TextChangedEventArgs e) { if (_inventoryLoaded) RenderInventory(); }
+    private void AppsFilter_Click(object sender, RoutedEventArgs e) { if (_inventoryLoaded) RenderInventory(); }
+    private async void RefreshApps_Click(object sender, RoutedEventArgs e) => await LoadInventoryAsync();
+
+    private async void UninstallApps_Click(object sender, RoutedEventArgs e) =>
+        await UninstallRowsAsync(_appRows.Where(r => r.Selected).ToList());
+
+    private async void UninstallSelectedApps_Click(object sender, RoutedEventArgs e) =>
+        await UninstallRowsAsync(AppsGrid.SelectedItems.OfType<AppRow>().Where(r => r.CanUninstall).ToList());
+
+    private async Task UninstallRowsAsync(List<AppRow> rows)
+    {
+        if (rows.Count == 0) { MessageBox.Show(this, "Tick (or select) the apps you want to uninstall.", "Uninstall"); return; }
+        var list = string.Join(Environment.NewLine, rows.Take(15).Select(r => $"  - {r.Name} {r.Version}")) + (rows.Count > 15 ? $"{Environment.NewLine}  ...and {rows.Count - 15} more" : "");
+        var interactive = rows.Count(r => r.UninstallMethod.StartsWith("Opens", StringComparison.Ordinal));
+        if (MessageBox.Show(this, $"Uninstall {rows.Count} app(s)?{Environment.NewLine}{Environment.NewLine}{list}{Environment.NewLine}{Environment.NewLine}" +
+                "Windows will ask for administrator approval for apps installed for all users." +
+                (interactive > 0 ? $" {interactive} app(s) will open their own uninstaller for you to complete." : ""),
+                "Confirm uninstall", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+
+        UninstallAppsButton.IsEnabled = false;
+        AppsResultText.Text = "Uninstalling...";
+        try
+        {
+            var (ok, lines) = await _tray.UninstallAsync(rows.Select(r => r.Item).ToList(), new List<string>());
+            AppsResultText.Text = ok ? $"Removed {rows.Count} app(s)." : "Some apps were not removed - see details.";
+            MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Uninstall results", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            await Task.Delay(1500);
+            _inventoryLoaded = false;
+            _inventory = await Task.Run(() => Core.Inventory.RegistryInventory.Collect(false, Platform.CurrentUserSid, new List<string>()));
+            // Prefer the agent's all-users view once its rescan finishes; meanwhile show what this user can see.
+            _inventoryLoaded = true;
+            RenderInventory();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Uninstall"); }
+        finally { UninstallAppsButton.IsEnabled = true; }
+    }
+
+    private void ExportApps_Click(object sender, RoutedEventArgs e)
+    {
+        if (_inventory.Count == 0) { MessageBox.Show(this, "Open the list first.", "Export apps"); return; }
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"PatchSentinel-installed-apps-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}",
+            Filter = "CSV for Excel (*.csv)|*.csv",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        static string Csv(string? v) => v is null ? "" : "\"" + v.Replace("\"", "\"\"") + "\"";
+        var lines = new List<string> { "Computer,Name,Version,Publisher,Install date,Size (MB),Installed for,User SID,Architecture,Install location,System component,MSI product code,Uninstall command,Quiet uninstall command,Registry key" };
+        lines.AddRange(_inventory.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).Select(i => string.Join(',',
+            Csv(Environment.MachineName), Csv(i.Name), Csv(i.Version), Csv(i.Publisher), Csv(i.InstallDate?.ToString("yyyy-MM-dd")), Csv(i.SizeMB?.ToString("0.#")),
+            Csv(i.Scope == InstallScope.Machine ? "All users" : "User"), Csv(i.UserSid), Csv(i.Architecture), Csv(i.InstallLocation),
+            Csv(i.IsSystemComponent ? "Yes" : "No"), Csv(i.ProductCode), Csv(i.UninstallString), Csv(i.QuietUninstallString), Csv(i.RegistryKey))));
+        File.WriteAllLines(dlg.FileName, lines);
+        StatusBarText.Text = $"Exported {_inventory.Count} apps to {dlg.FileName}";
+    }
+
+    // ---------------- uninstall from App updates ----------------
+
+    private async void UninstallTickedUpdates_Click(object sender, RoutedEventArgs e) =>
+        await UninstallUpdateRowsAsync(_updates.Where(r => r.Selected).ToList());
+
+    private async void UninstallSelectedUpdates_Click(object sender, RoutedEventArgs e) =>
+        await UninstallUpdateRowsAsync(UpdatesGrid.SelectedItems.OfType<UpdateRow>().ToList());
+
+    private async Task UninstallUpdateRowsAsync(List<UpdateRow> rows)
+    {
+        rows = rows.Where(r => !r.Candidate.ManagedByWindows && WingetClient.IsValidId(r.Id)).ToList();
+        if (rows.Count == 0) { MessageBox.Show(this, "Tick (or right-click) the apps you want to uninstall.", "Uninstall"); return; }
+        if (MessageBox.Show(this, $"Uninstall these app(s) with winget?{Environment.NewLine}{Environment.NewLine}" +
+                string.Join(Environment.NewLine, rows.Select(r => $"  - {r.Name} {r.Installed}")) +
+                $"{Environment.NewLine}{Environment.NewLine}Windows will ask for administrator approval.", "Confirm uninstall",
+                MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+        try
+        {
+            var (ok, lines) = await _tray.UninstallAsync(new List<InstalledItem>(), rows.Select(r => r.Id).ToList());
+            MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Uninstall results", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Uninstall"); }
     }
 
     // ---------------- history ----------------

@@ -6,6 +6,17 @@ namespace PatchSentinel.Core.Config;
 
 public enum ScheduleFrequency { Daily, Weekly }
 
+/// <summary>How PatchSentinel handles new releases of itself.</summary>
+public enum SelfUpdateMode
+{
+    /// <summary>Notify, then install automatically shortly afterwards (or straight away from the tray).</summary>
+    Automatic,
+    /// <summary>Notify only; install when the user clicks "Install update now" or an admin runs psentinel self-update.</summary>
+    NotifyOnly,
+    /// <summary>Never check.</summary>
+    Off,
+}
+
 public sealed class UpdateSchedule
 {
     public bool Enabled { get; set; } = true;
@@ -82,8 +93,11 @@ public sealed class AgentSettings
     public bool UseEndOfLifeApi { get; set; } = true;
     public bool AutoUpdateRules { get; set; } = true;
     public string? RulesUrl { get; set; }
-    /// <summary>Install new PatchSentinel releases automatically.</summary>
+    /// <summary>Legacy switch (v0.1.4); false behaves like <see cref="SelfUpdateMode.Off"/>.</summary>
     public bool AutoUpdateAgent { get; set; } = true;
+    public SelfUpdateMode SelfUpdateMode { get; set; } = SelfUpdateMode.Automatic;
+    /// <summary>Minutes between telling the user about a new version and installing it automatically.</summary>
+    public int SelfUpdateGraceMinutes { get; set; } = 15;
     /// <summary>GitHub owner/repo to update from; defaults to the repo the build came from.</summary>
     public string? UpdateRepo { get; set; }
     public bool AllowUserExclusions { get; set; } = true;
@@ -102,6 +116,7 @@ public sealed class EffectiveSettings
     public bool ManagedByPolicy { get; set; }
 
     public string? EffectiveRulesUrl => string.IsNullOrWhiteSpace(Settings.RulesUrl) ? AppPaths.BuiltInRulesUrl : Settings.RulesUrl;
+    public SelfUpdateMode EffectiveSelfUpdateMode => Settings.AutoUpdateAgent ? Settings.SelfUpdateMode : SelfUpdateMode.Off;
     public string? EffectiveUpdateRepo => string.IsNullOrWhiteSpace(Settings.UpdateRepo) ? AppPaths.BuiltInUpdateRepo : Settings.UpdateRepo;
 }
 
@@ -147,6 +162,8 @@ public static class PolicyReader
             if (Bool(k, "UseEndOfLifeApi") is { } eol) s.UseEndOfLifeApi = eol;
             if (Bool(k, "AutoUpdateRules") is { } aur2) s.AutoUpdateRules = aur2;
             if (Bool(k, "AutoUpdateAgent") is { } aua) s.AutoUpdateAgent = aua;
+            if (k.GetValue("SelfUpdateMode") is string sum && Enum.TryParse<SelfUpdateMode>(sum, true, out var mode)) s.SelfUpdateMode = mode;
+            if (Int(k, "SelfUpdateGraceMinutes") is { } sgm) s.SelfUpdateGraceMinutes = Math.Clamp(sgm, 0, 7 * 24 * 60);
             if (k.GetValue("UpdateRepo") is string repo && repo.Contains('/')) s.UpdateRepo = repo.Trim();
             if (Int(k, "NearingEolWarningDays") is { } ned) s.NearingEolWarningDays = Math.Clamp(ned, 0, 730);
             if (Int(k, "ScanIntervalHours") is { } sih) s.ScanIntervalHours = Math.Clamp(sih, 1, 168);

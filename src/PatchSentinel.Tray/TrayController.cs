@@ -26,6 +26,7 @@ public sealed class TrayController : IDisposable
     private (int Count, DateTime At) _lastEolAlert = (-1, DateTime.MinValue);
     private bool _polling;
     private int _lastManualAlert;
+    private string? _notifiedVersion;
 
     public AgentPipeClient Client { get; } = new();
     public AgentStatus? Status { get; private set; }
@@ -43,7 +44,7 @@ public sealed class TrayController : IDisposable
             ContextMenuStrip = BuildMenu(),
         };
         _icon.DoubleClick += (_, _) => ShowMainWindow(null);
-        _icon.BalloonTipClicked += (_, _) => ShowMainWindow(_balloonTarget);
+        _icon.BalloonTipClicked += (_, _) => ShowMainWindow(_balloonTarget == "self-update" ? "overview" : _balloonTarget);
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         _timer.Tick += async (_, _) => await PollAsync();
     }
@@ -73,6 +74,7 @@ public sealed class TrayController : IDisposable
         menu.Items.Add("Scan now", null, async (_, _) => await RunCommandAsync(Commands.Scan, null, "Scan started."));
         menu.Items.Add("Install app updates now", null, async (_, _) => await RunCommandAsync(Commands.InstallUpdates, new InstallUpdatesRequest(null), "Installing updates in the background."));
         menu.Items.Add("Postpone scheduled updates by 1 hour", null, async (_, _) => await DeferAsync(60));
+        menu.Items.Add("Check for PatchSentinel updates", null, async (_, _) => await CheckSelfUpdateAsync());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => _app.Shutdown());
         return menu;
@@ -187,6 +189,18 @@ public sealed class TrayController : IDisposable
             }
         }
 
+        // A new version of PatchSentinel itself.
+        if (s.AvailableVersion is { } av && av != _notifiedVersion)
+        {
+            _notifiedVersion = av;
+            Notify($"PatchSentinel {av} is available",
+                s.SelfUpdateInstallsAt is { } at
+                    ? $"It will install automatically at {at.LocalDateTime:HH:mm}. Click to install it now."
+                    : "Click to open PatchSentinel and install the update.",
+                Forms.ToolTipIcon.Info, "self-update");
+            return;
+        }
+
         // Apps whose automatic updates keep failing.
         if (s.ManualUpdatesNeeded > _lastManualAlert)
         {
@@ -230,6 +244,105 @@ public sealed class TrayController : IDisposable
             Notify("PatchSentinel agent not reachable", $"Is the 'PatchSentinel Agent' service running? ({ex.Message})", Forms.ToolTipIcon.Error);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Uninstalls apps. Per-user apps of the signed-in user are removed here; machine-wide apps and winget packages
+    /// are removed by "psentinel uninstall" started elevated, so Windows asks for administrator approval (UAC).
+    /// </summary>
+    public async Task<(bool Success, List<string> Lines)> UninstallAsync(IReadOnlyList<InstalledItem> items, IReadOnlyList<string> wingetIds, CancellationToken ct = default)
+    {
+        var lines = new List<string>();
+        var records = new List<UninstallRecord>();
+        var sid = Platform.CurrentUserSid;
+
+        // 1. This user's own per-user apps: no elevation needed.
+        var mine = items.Where(i => i.Scope == InstallScope.User && (i.UserSid is null || i.UserSid == sid)).ToList();
+        var executor = new RemediationExecutor(WingetClient.TryCreate(isSystem: false), runningAsSystem: false);
+        foreach (var i in mine)
+        {
+            var steps = RemediationPlanner.RegistryUninstallSteps(i);
+            if (steps.Count == 0) { records.Add(new UninstallRecord(i.Name, i.Version, false, "No uninstaller registered")); continue; }
+            var res = await executor.ExecuteAsync(new Finding { Id = "uninstall", Title = i.Name },
+                new RemediationAction { Id = "uninstall", Label = i.Name, Steps = steps }, _ => true, ct);
+            records.Add(new UninstallRecord(i.Name, i.Version, res.Success, res.Success ? "Uninstalled" : string.Join("; ", res.Steps.Select(s => s.Message))));
+        }
+        foreach (var other in items.Where(i => i.Scope == InstallScope.User && i.UserSid is not null && i.UserSid != sid))
+            lines.Add($"SKIP {other.Name}: installed for another user - they need to remove it while signed in.");
+
+        // 2. Machine-wide apps and winget packages: elevated helper.
+        var machine = items.Where(i => i.Scope == InstallScope.Machine && i.RegistryKey is not null).ToList();
+        if (machine.Count > 0 || wingetIds.Count > 0)
+        {
+            var exe = System.IO.Path.Combine(AppContext.BaseDirectory, "psentinel.exe");
+            if (!System.IO.File.Exists(exe)) return (false, new List<string> { "psentinel.exe was not found next to the tray app." });
+            var resultFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"patchsentinel-uninstall-{Guid.NewGuid():N}.json");
+            var args = "uninstall --yes --result \"" + resultFile + "\"" +
+                       string.Concat(machine.Select(m => $" --key \"{m.RegistryKey}\"")) +
+                       string.Concat(wingetIds.Where(WingetClient.IsValidId).Select(id => $" --winget-id {id}"));
+            try
+            {
+                using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, args)
+                {
+                    UseShellExecute = true, Verb = "runas", WindowStyle = System.Diagnostics.ProcessWindowStyle.Minimized,
+                });
+                if (p is not null) await p.WaitForExitAsync(ct);
+                if (System.IO.File.Exists(resultFile))
+                {
+                    var outcome = System.Text.Json.JsonSerializer.Deserialize<UninstallResultFile>(System.IO.File.ReadAllText(resultFile), Json.Options);
+                    if (outcome is not null)
+                    {
+                        records.AddRange(outcome.Results);
+                        if (outcome.RebootRequired) lines.Add("A restart is needed to finish removing some apps.");
+                    }
+                    System.IO.File.Delete(resultFile);
+                }
+                else lines.Add("The uninstaller did not report back; check the list after it refreshes.");
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                lines.Add("Cancelled: administrator approval was not given, so machine-wide apps were left installed.");
+            }
+        }
+
+        lines.InsertRange(0, records.Select(r => $"{(r.Success ? "OK  " : "FAIL")} {r.Name} {r.Version}: {r.Message}"));
+        if (records.Count > 0)
+        {
+            try { await Client.SendAsync(Commands.RecordUninstall, records, ct: ct); } catch { /* history is best effort */ }
+            _ = RunCommandAsync(Commands.Scan, null, null);
+        }
+        return (records.Count > 0 && records.All(r => r.Success), lines);
+    }
+
+    public async Task CheckSelfUpdateAsync()
+    {
+        try
+        {
+            var r = await Client.SendAsync(Commands.CheckSelfUpdate, timeout: TimeSpan.FromSeconds(40));
+            if (!r.Ok) { Notify("PatchSentinel", r.Error ?? "The update check failed.", Forms.ToolTipIcon.Warning); return; }
+            var res = r.As<SelfUpdateCheckResult>();
+            await PollAsync(); // raises the "available" notification if there is one
+            if (res is { UpdateAvailable: false }) Notify("PatchSentinel", res.Message);
+        }
+        catch (Exception ex) { Notify("PatchSentinel agent not reachable", ex.Message, Forms.ToolTipIcon.Error); }
+    }
+
+    public async Task InstallSelfUpdateAsync()
+    {
+        try
+        {
+            var r = await Client.SendAsync(Commands.InstallSelfUpdate);
+            if (!r.Ok && (r.Error ?? "").Contains("Check for", StringComparison.Ordinal))
+            {
+                // The agent restarted and forgot the release: check again, then install.
+                await Client.SendAsync(Commands.CheckSelfUpdate, timeout: TimeSpan.FromSeconds(40));
+                r = await Client.SendAsync(Commands.InstallSelfUpdate);
+            }
+            if (!r.Ok) { Notify("Could not update PatchSentinel", r.Error ?? "", Forms.ToolTipIcon.Warning); return; }
+            Notify("Updating PatchSentinel", "Downloading and installing the new version. PatchSentinel will close and reopen by itself.");
+            await PollAsync();
+        }
+        catch (Exception ex) { Notify("PatchSentinel agent not reachable", ex.Message, Forms.ToolTipIcon.Error); }
     }
 
     public async Task<bool> DeferAsync(int minutes)

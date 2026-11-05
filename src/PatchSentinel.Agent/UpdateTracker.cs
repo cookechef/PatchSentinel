@@ -49,7 +49,7 @@ internal sealed class UpdateTracker
                               (m.Flagged ? $" ({m.Failures} times)" : $" (attempt {m.Failures} of {FailuresBeforeManual})") + $": {m.LastError}";
                 return m.Flagged
                     ? u with { NeedsManualUpdate = true, ManualReason = m.LastError, LastAttempt = attempt, VendorUrl = m.VendorUrl, InstallerUrl = m.InstallerUrl }
-                    : u with { LastAttempt = attempt };
+                    : u with { LastAttempt = attempt, VendorUrl = m.VendorUrl, InstallerUrl = m.InstallerUrl };
             }).ToList();
     }
 
@@ -85,12 +85,17 @@ internal sealed class UpdateTracker
         }
     }
 
-    /// <summary>Flagged apps whose vendor links have not been looked up in the last day.</summary>
+    /// <summary>Apps with failed updates whose vendor links have not been looked up in the last day.</summary>
     public List<string> NeedingLinks()
     {
         lock (_gate)
-            return _manual.Values.Where(m => m.Flagged && m.VendorUrl is null && (m.LinksCheckedAt is null || DateTimeOffset.Now - m.LinksCheckedAt > TimeSpan.FromDays(1)))
+            return _manual.Values.Where(m => m.Failures > 0 && m.VendorUrl is null && (m.LinksCheckedAt is null || DateTimeOffset.Now - m.LinksCheckedAt > TimeSpan.FromDays(1)))
                           .Select(m => m.Id).ToList();
+    }
+
+    public (string? VendorUrl, string? InstallerUrl) LinksFor(string id)
+    {
+        lock (_gate) return _manual.TryGetValue(id, out var m) ? (m.VendorUrl, m.InstallerUrl) : (null, null);
     }
 
     public void SetLinks(string id, string? vendorUrl, string? installerUrl)

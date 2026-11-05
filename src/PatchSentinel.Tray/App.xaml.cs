@@ -36,6 +36,7 @@ public partial class App : Application
             args.Handled = true;
         };
 
+        ThemeManager.Initialize(this);
         _tray = new TrayController(this);
         _tray.Start();
 

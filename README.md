@@ -26,6 +26,7 @@ PatchSentinel covers both jobs. It installs app updates with winget on a schedul
 | **Advance warning** | Flags software approaching end of life (90 days by default). For example, **.NET 8 and .NET 9 reach end of support on 10 November 2026**. |
 | **Dependency check** | Finds framework-dependent .NET apps from their `*.runtimeconfig.json` and applies the .NET roll-forward rules to work out whether each one **would break** if a runtime were removed. |
 | **One-click remediation** | Uninstall via the registered installer, then delete leftover folders the scanner still sees. You can also install the supported replacement (e.g. .NET 10) with winget, or remove only superseded patch versions (always safe). |
+| **Light and dark mode** | Match Windows, Light or Dark. Choose it on the Overview tab or from the tray icon's Appearance menu; the choice is saved per user. |
 | **Notifications** | Windows tray notifications when legacy software is found, before scheduled updates, and when jobs finish. |
 | **Reports** | HTML / CSV / JSON exports to use as CE+ remediation evidence. |
 | **RMM-friendly CLI** | `psentinel.exe scan --json` with exit codes your monitors can alert on, plus `fix --safe` and `fix --remove-unused-eol` for unattended clean-up. |

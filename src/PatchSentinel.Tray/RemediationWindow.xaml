@@ -5,20 +5,20 @@
         WindowStartupLocation="CenterOwner" FontFamily="Segoe UI" FontSize="13" ShowInTaskbar="False">
     <DockPanel Margin="18">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button x:Name="ApplyButton" Content="Apply fix" Click="Apply_Click" Style="{StaticResource Primary}" IsDefault="True"/>
+            <Button x:Name="ApplyButton" Content="Apply fix" Click="Apply_Click" Style="{DynamicResource Primary}" IsDefault="True"/>
             <Button x:Name="CloseButton" Content="Close" IsCancel="True" Margin="0,0,0,8"/>
         </StackPanel>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <TextBlock x:Name="TitleText" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                <TextBlock x:Name="StatusText" Foreground="{StaticResource Critical}" Margin="0,2,0,0"/>
+                <TextBlock x:Name="StatusText" Foreground="{DynamicResource Critical}" Margin="0,2,0,0"/>
                 <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Margin="0,8,0,0"/>
 
                 <TextBlock Text="Installed copies" Style="{StaticResource SectionLabel}"/>
                 <ItemsControl x:Name="ItemsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="8,1" Foreground="{StaticResource Muted}"/>
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="8,1" Foreground="{DynamicResource Muted}"/>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -34,12 +34,12 @@
 
                 <TextBlock x:Name="AdviceHeader" Text="Advice" Style="{StaticResource SectionLabel}"/>
                 <TextBlock x:Name="AdviceText" TextWrapping="Wrap"/>
-                <TextBlock x:Name="ReferencesText" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{StaticResource Muted}"/>
+                <TextBlock x:Name="ReferencesText" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{DynamicResource Muted}"/>
 
                 <TextBlock x:Name="ActionsHeader" Text="Choose a fix" Style="{StaticResource SectionLabel}"/>
                 <StackPanel x:Name="ActionsPanel"/>
-                <TextBlock x:Name="StepsText" TextWrapping="Wrap" Margin="24,6,0,0" Foreground="{StaticResource Muted}"/>
-                <TextBlock x:Name="WarningText" Foreground="{StaticResource Critical}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                <TextBlock x:Name="StepsText" TextWrapping="Wrap" Margin="24,6,0,0" Foreground="{DynamicResource Muted}"/>
+                <TextBlock x:Name="WarningText" Foreground="{DynamicResource Critical}" TextWrapping="Wrap" Margin="0,8,0,0"/>
                 <TextBox x:Name="ResultText" TextWrapping="Wrap" Margin="0,12,0,0" FontFamily="Consolas" FontSize="12"
                          IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
             </StackPanel>

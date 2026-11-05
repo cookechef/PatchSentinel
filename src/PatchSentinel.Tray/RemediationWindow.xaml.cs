@@ -136,7 +136,7 @@ public partial class RemediationWindow : Window
             var (ok, lines) = await _tray.RemediateAsync(_finding, a, _cts.Token);
             Changed = true;
             ResultText.Text = string.Join(Environment.NewLine, lines);
-            ResultText.Foreground = ok ? Brushes.DarkGreen : (Brush)FindResource("Critical");
+            ResultText.Foreground = ok ? (Brush)FindResource("OkText") : (Brush)FindResource("Critical");
             if (ok) CloseButton.Content = "Done";
         }
         catch (Exception ex)

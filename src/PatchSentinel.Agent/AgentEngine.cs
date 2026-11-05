@@ -378,7 +378,20 @@ internal sealed class AgentEngine
         foreach (var name in newlyManual)
             details.Add($"MANUAL {name}: failed {UpdateTracker.FailuresBeforeManual} times, so it has been added to the manual updates list and will be skipped by scheduled runs.");
 
-        if (newlyManual.Count > 0) await FillVendorLinksAsync(ct);
+        if (failed + notApplied > 0)
+        {
+            await FillVendorLinksAsync(ct);
+            // Give each app that did not update its download link, so a partly failed "Install all" is easy to finish by hand.
+            foreach (var u in targets)
+            {
+                var r = results[u.Id];
+                var stillOld = still.Any(x => x.Id.Equals(u.Id, StringComparison.OrdinalIgnoreCase) && VersionUtil.Compare(x.InstalledVersion, u.InstalledVersion) <= 0);
+                if (r.Success && !stillOld) continue;
+                var (vendor, installer) = _tracker.LinksFor(u.Id);
+                if (vendor is not null) details.Add($"LINK {u.Name}: download page {vendor}");
+                if (installer is not null) details.Add($"LINK {u.Name}: installer {installer}");
+            }
+        }
         lock (_gate) if (_lastScan is not null) _lastScan.Updates = _tracker.Annotate(_lastScan.Updates);
 
         return new JobInfo

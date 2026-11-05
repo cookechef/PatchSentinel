@@ -91,7 +91,8 @@ public sealed class UpdateRow : INotifyPropertyChanged
     public string? VendorUrl => Candidate.VendorUrl;
     public string? InstallerUrl => Candidate.InstallerUrl;
     /// <summary>The Download page link is shown for apps that need a manual update.</summary>
-    public Visibility LinkVisibility => Candidate.NeedsManualUpdate || Candidate.VendorUrl is not null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility LinkVisibility => Candidate.NeedsManualUpdate || Candidate.VendorUrl is not null || Candidate.LastAttempt is not null
+        ? Visibility.Visible : Visibility.Collapsed;
     public string Note { get; set; } = "";
 
     public bool Excluded
@@ -145,6 +146,7 @@ public partial class MainWindow : Window
     private List<InstalledItem> _inventory = [];
     private List<AppRow> _appRows = [];
     private bool _inventoryLoaded;
+    private bool _themeLoading;
     private string? _lastSeenJob;
 
     public MainWindow(TrayController tray)
@@ -155,6 +157,9 @@ public partial class MainWindow : Window
         _tray.StatusChanged += OnStatusChanged;
         Closed += (_, _) => _tray.StatusChanged -= OnStatusChanged;
         Loaded += async (_, _) => await RefreshAllAsync();
+        _themeLoading = true;
+        ThemeBox.SelectedIndex = (int)ThemeManager.Current switch { 1 => 1, 2 => 2, _ => 0 };
+        _themeLoading = false;
         Tabs.SelectionChanged += async (_, e) =>
         {
             if (e.OriginalSource == Tabs && Tabs.SelectedItem == AppsTab && !_inventoryLoaded) await LoadInventoryAsync();
@@ -715,6 +720,12 @@ public partial class MainWindow : Window
     }
 
     private void ShowWindowsManaged_Click(object sender, RoutedEventArgs e) => RenderScan();
+
+    private void Theme_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_themeLoading || ThemeBox.SelectedItem is not ComboBoxItem { Tag: string tag } || !Enum.TryParse<AppTheme>(tag, out var theme)) return;
+        ThemeManager.Set(Application.Current, theme);
+    }
 
     // ---------------- vendor links ----------------
 

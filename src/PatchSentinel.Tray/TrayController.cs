@@ -75,6 +75,18 @@ public sealed class TrayController : IDisposable
         menu.Items.Add("Install app updates now", null, async (_, _) => await RunCommandAsync(Commands.InstallUpdates, new InstallUpdatesRequest(null), "Installing updates in the background."));
         menu.Items.Add("Postpone scheduled updates by 1 hour", null, async (_, _) => await DeferAsync(60));
         menu.Items.Add("Check for PatchSentinel updates", null, async (_, _) => await CheckSelfUpdateAsync());
+        var appearance = new Forms.ToolStripMenuItem("Appearance");
+        foreach (var t in new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark })
+        {
+            var item = new Forms.ToolStripMenuItem(t == AppTheme.System ? "Match Windows" : t.ToString()) { Tag = t };
+            item.Click += (_, _) => ThemeManager.Set(_app, t);
+            appearance.DropDownItems.Add(item);
+        }
+        appearance.DropDownOpening += (_, _) =>
+        {
+            foreach (Forms.ToolStripMenuItem i in appearance.DropDownItems) i.Checked = (AppTheme)i.Tag! == ThemeManager.Current;
+        };
+        menu.Items.Add(appearance);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => _app.Shutdown());
         return menu;

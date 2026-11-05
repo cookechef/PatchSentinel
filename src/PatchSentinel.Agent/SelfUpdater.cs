@@ -117,9 +117,32 @@ internal static class SelfUpdater
         return target;
     }
 
+    /// <summary>
+    /// Closes running tray apps so the installer can replace PatchSentinel.Tray.exe straight away. A file in use
+    /// is otherwise only replaced at the next restart. The new agent reopens the tray app afterwards.
+    /// </summary>
+    public static int CloseTrayApps()
+    {
+        var closed = 0;
+        foreach (var p in Process.GetProcessesByName("PatchSentinel.Tray"))
+        {
+            try
+            {
+                p.Kill();
+                p.WaitForExit(10000);
+                closed++;
+            }
+            catch (Exception ex) { AppLog.Warn($"Could not close tray app (pid {p.Id}): {ex.Message}"); }
+            finally { p.Dispose(); }
+        }
+        if (closed > 0) AppLog.Info($"Closed {closed} tray app instance(s) before upgrading.");
+        return closed;
+    }
+
     /// <summary>Starts a silent upgrade. msiexec stops and restarts this service itself, so it must outlive us.</summary>
     public static void LaunchInstaller(string msiPath)
     {
+        CloseTrayApps();
         var log = Path.Combine(AppPaths.LogDir, $"self-update-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         var msiexec = Path.Combine(Environment.SystemDirectory, "msiexec.exe");
         var psi = new ProcessStartInfo(msiexec, $"/i \"{msiPath}\" /qn /norestart REBOOT=ReallySuppress /l*v \"{log}\"")

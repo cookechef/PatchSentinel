@@ -339,7 +339,7 @@ public sealed class TrayController : IDisposable
                 r = await Client.SendAsync(Commands.InstallSelfUpdate);
             }
             if (!r.Ok) { Notify("Could not update PatchSentinel", r.Error ?? "", Forms.ToolTipIcon.Warning); return; }
-            Notify("Updating PatchSentinel", "Downloading and installing the new version. PatchSentinel will close and reopen by itself.");
+            Notify("Updating PatchSentinel", "Downloading and installing the new version. This icon will disappear for a minute and come back on the new version.");
             await PollAsync();
         }
         catch (Exception ex) { Notify("PatchSentinel agent not reachable", ex.Message, Forms.ToolTipIcon.Error); }

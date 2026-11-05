@@ -1,4 +1,5 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Package Name="PatchSentinel"
            Manufacturer="PatchSentinel contributors"
@@ -10,6 +11,9 @@
     <SummaryInformation Description="PatchSentinel - winget patching and end-of-life software remediation" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of PatchSentinel is already installed." Schedule="afterInstallInitialize" />
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- Close the running tray app so its exe can be replaced without a restart; the agent reopens it afterwards. -->
+    <util:CloseApplication Id="CloseTrayApp" Target="PatchSentinel.Tray.exe" CloseMessage="yes" TerminateProcess="0" RebootPrompt="no" />
 
     <Icon Id="PatchSentinelIcon" SourceFile="$(var.AssetsDir)\patchsentinel.ico" />
     <Property Id="ARPPRODUCTICON" Value="PatchSentinelIcon" />

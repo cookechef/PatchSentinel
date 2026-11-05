@@ -15,6 +15,10 @@ internal sealed class AgentState
     public DateTimeOffset? LastScanAt { get; set; }
     public DateTimeOffset? LastUpdateRunAt { get; set; }
     public DateTimeOffset? LastRulesCheckAt { get; set; }
+    public DateTimeOffset? LastSelfUpdateCheckAt { get; set; }
+    public string? AvailableVersion { get; set; }
+    public string? LastSelfUpdateAttemptVersion { get; set; }
+    public DateTimeOffset? LastSelfUpdateAttemptAt { get; set; }
     public DateTimeOffset? DeferredUntil { get; set; }
     public int DeferralsUsed { get; set; }
     /// <summary>Anchor for the schedule: runs due after this time are executed.</summary>
@@ -78,6 +82,8 @@ internal sealed class AgentEngine
             catch (Exception ex) when (ex is not OperationCanceledException) { AppLog.Warn($"Rules update from {url} failed: {ex.Message}"); }
         }
 
+        if (await CheckSelfUpdateAsync(now, ct)) return;
+
         if (NextUpdateAt(now) is { } due && now >= due)
         {
             await RunJobAsync("Installing scheduled updates", "updates", c => InstallUpdatesAsync(null, scheduled: true, c), ct);
@@ -86,6 +92,46 @@ internal sealed class AgentEngine
 
         if (NextScanAt(now) is { } scanDue && now >= scanDue)
             await RunJobAsync("Scanning", "scan", ScanAsync, ct);
+    }
+
+    /// <summary>Daily check of GitHub Releases; installs a newer version when the agent is idle. Returns true if an update was started.</summary>
+    private async Task<bool> CheckSelfUpdateAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var repo = _settings.EffectiveUpdateRepo;
+        if (!_settings.Settings.AutoUpdateAgent || !SelfUpdater.IsValidRepo(repo)) return false;
+        if (now - _startedAt < TimeSpan.FromMinutes(10)) return false; // let a freshly started agent settle first
+        if (_state.LastSelfUpdateCheckAt is { } last && now - last < TimeSpan.FromHours(24)) return false;
+        _state.LastSelfUpdateCheckAt = now;
+        SaveState();
+
+        ReleaseInfo? latest;
+        try { latest = await SelfUpdater.GetLatestAsync(repo!, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { AppLog.Warn($"Self-update check against {repo} failed: {ex.Message}"); return false; }
+
+        if (latest is null || !SelfUpdater.IsNewer(latest.Version, AppPaths.Version))
+        {
+            _state.AvailableVersion = null;
+            SaveState();
+            return false;
+        }
+        _state.AvailableVersion = latest.Version;
+        SaveState();
+        AppLog.Info($"PatchSentinel {latest.Version} is available ({latest.PageUrl}).");
+
+        // Do not retry a version that failed to install within the last day (the next daily check retries it).
+        if (_state.LastSelfUpdateAttemptVersion == latest.Version && _state.LastSelfUpdateAttemptAt is { } at && now - at < TimeSpan.FromHours(23)) return false;
+        return await RunJobAsync($"Updating PatchSentinel to {latest.Version}", "self-update", c => SelfUpdateAsync(latest, c), ct);
+    }
+
+    private async Task<JobInfo> SelfUpdateAsync(ReleaseInfo latest, CancellationToken ct)
+    {
+        _state.LastSelfUpdateAttemptVersion = latest.Version;
+        _state.LastSelfUpdateAttemptAt = DateTimeOffset.Now;
+        SaveState();
+        var msi = await SelfUpdater.DownloadAndVerifyAsync(latest, ct);
+        AppLog.Info($"Downloaded and verified {latest.MsiName} (sha256 {latest.Sha256}); starting silent upgrade. The service will restart.");
+        SelfUpdater.LaunchInstaller(msi);
+        return new JobInfo { Success = true, Message = $"Installing PatchSentinel {latest.Version}; the agent will restart." };
     }
 
     private DateTimeOffset? NextScanAt(DateTimeOffset now)
@@ -368,6 +414,7 @@ internal sealed class AgentEngine
             return new AgentStatus
             {
                 Version = AppPaths.Version,
+                AvailableVersion = _state.AvailableVersion is { } av && SelfUpdater.IsNewer(av, AppPaths.Version) ? av : null,
                 BusyWith = _busyWith,
                 LastScanAt = _state.LastScanAt,
                 NextScanAt = NextScanAt(now),

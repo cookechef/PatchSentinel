@@ -33,6 +33,7 @@ internal static class Cli
                 "updates" => await UpdatesAsync(args, cts.Token),
                 "fix" => await FixAsync(args, cts.Token),
                 "rules" => await RulesAsync(args, cts.Token),
+                "self-update" => await SelfUpdateAsync(args, cts.Token),
                 "run" => await RunConsoleAsync(cts.Token),
                 _ => Usage($"Unknown command '{args[0]}'."),
             };
@@ -68,6 +69,9 @@ internal static class Cli
           fix --safe                   Remove superseded .NET patch versions and patch supported runtimes
           fix --remove-unused-eol      Remove EOL .NET runtimes that no installed application uses
             --yes                      Do not prompt (required when run non-interactively)
+
+          self-update [--check]        Check GitHub for a newer PatchSentinel and install it
+            --repo <owner/repo>        Override the repository to update from
 
           rules update [--url <url>]   Download the latest EOL rules catalogue
           rules show                   Show the rules catalogue in use
@@ -252,6 +256,23 @@ internal static class Cli
         Console.WriteLine($"Rules catalogue {catalog.CatalogVersion} ({catalog.Rules.Count} rules)");
         foreach (var rule in catalog.Rules) Console.WriteLine($"  {rule.Id,-28} {rule.Product}{(rule.Disabled ? " (disabled)" : "")}");
         foreach (var w in warnings) Console.WriteLine($"note: {w}");
+        return ExitClean;
+    }
+
+    private static async Task<int> SelfUpdateAsync(string[] args, CancellationToken ct)
+    {
+        var repo = Value(args, "--repo") ?? SettingsStore.LoadEffective(AppPaths.SettingsFile).EffectiveUpdateRepo;
+        if (!SelfUpdater.IsValidRepo(repo)) { Console.Error.WriteLine("No update repository configured (use --repo owner/repo)."); return ExitError; }
+        var latest = await SelfUpdater.GetLatestAsync(repo!, ct);
+        if (latest is null) { Console.WriteLine($"No published release found in {repo}."); return ExitClean; }
+        Console.WriteLine($"Installed {AppPaths.Version}, latest release {latest.Version} ({latest.PageUrl})");
+        if (!SelfUpdater.IsNewer(latest.Version, AppPaths.Version)) { Console.WriteLine("PatchSentinel is up to date."); return ExitClean; }
+        if (Has(args, "--check")) return ExitUpdatesPending;
+        if (!Platform.IsElevated) { Console.Error.WriteLine("Run elevated to install the update."); return ExitError; }
+        Console.WriteLine($"Downloading {latest.MsiName} and checking its SHA-256...");
+        var msi = await SelfUpdater.DownloadAndVerifyAsync(latest, ct);
+        Console.WriteLine("Verified. Starting silent upgrade (the PatchSentinel service will restart).");
+        SelfUpdater.LaunchInstaller(msi);
         return ExitClean;
     }
 

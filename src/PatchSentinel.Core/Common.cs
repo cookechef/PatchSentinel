@@ -51,14 +51,15 @@ public static class AppPaths
         ?? typeof(AppPaths).Assembly.GetName().Version?.ToString() ?? "0.0.0";
 
     /// <summary>Rules URL baked in at build time (CI points it at the GitHub repo hosting this project).</summary>
-    public static string? BuiltInRulesUrl
+    public static string? BuiltInRulesUrl => Metadata("DefaultRulesUrl");
+
+    /// <summary>owner/repo whose GitHub Releases PatchSentinel updates itself from (set by CI).</summary>
+    public static string? BuiltInUpdateRepo => Metadata("UpdateRepo");
+
+    private static string? Metadata(string key)
     {
-        get
-        {
-            var v = typeof(AppPaths).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-                .FirstOrDefault(a => a.Key == "DefaultRulesUrl")?.Value;
-            return string.IsNullOrWhiteSpace(v) ? null : v;
-        }
+        var v = typeof(AppPaths).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value;
+        return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 }
 

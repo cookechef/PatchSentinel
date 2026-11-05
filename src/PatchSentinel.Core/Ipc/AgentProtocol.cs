@@ -57,6 +57,8 @@ public sealed class JobInfo
 public sealed class AgentStatus
 {
     public string Version { get; set; } = "";
+    /// <summary>Newer PatchSentinel release found on GitHub, if any.</summary>
+    public string? AvailableVersion { get; set; }
     public string? BusyWith { get; set; }
     public DateTimeOffset? LastScanAt { get; set; }
     public DateTimeOffset? NextScanAt { get; set; }

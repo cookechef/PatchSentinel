@@ -51,6 +51,23 @@ public partial class App : Application
             _tray.ShowMainWindow(null);
     }
 
+    /// <summary>After a self-update replaced the exe on disk, start the new version and exit this one.</summary>
+    internal void RestartIntoNewVersion()
+    {
+        var path = Environment.ProcessPath;
+        if (path is null) return;
+        _tray?.Dispose();
+        _tray = null;
+        if (_ownsMutex)
+        {
+            try { _mutex?.ReleaseMutex(); } catch { /* ignore */ }
+            _ownsMutex = false;
+        }
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); }
+        catch (Exception ex) { AppLog.Error("Could not restart the tray app after an update", ex); }
+        Shutdown();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         _tray?.Dispose();

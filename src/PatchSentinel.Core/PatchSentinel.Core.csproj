@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <AssemblyMetadata Include="DefaultRulesUrl" Value="$(DefaultRulesUrl)" />
+    <AssemblyMetadata Include="UpdateRepo" Value="$(UpdateRepo)" />
     <InternalsVisibleTo Include="PatchSentinel.Core.Tests" />
   </ItemGroup>
 

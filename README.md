@@ -61,6 +61,18 @@ The MSI installs to `C:\Program Files\PatchSentinel`, registers and starts the *
 
 **Requirements:** Windows 10 1809+ / Windows 11 / Windows Server 2019+ (x64). App updates need **winget (App Installer)**. EOL detection and remediation work without it, but installing replacements needs it. There is no .NET prerequisite: the binaries are self-contained, so PatchSentinel does not add yet another runtime to the machine.
 
+## Automatic updates
+
+From v0.1.4, PatchSentinel keeps itself up to date:
+
+- The agent checks your repository's **latest GitHub Release** once a day (starting 10 minutes after the service starts).
+- If there is a newer version, it downloads the MSI into `C:\ProgramData\PatchSentinel\updates`. It only installs it if the file's SHA-256 matches GitHub's published digest for that asset (or the release's `SHA256SUMS.txt`). It then runs a silent upgrade. The service restarts on the new version and the tray app restarts itself, with settings and history kept.
+- Drafts and pre-releases are ignored, so mark a release as **pre-release** on GitHub to keep it off devices while you test it.
+- To roll out a release on demand, run `psentinel self-update` (elevated). Use `psentinel self-update --check` to just report whether an update is available (exit code 12 if so).
+- To turn it off or point devices at another repo, set `AutoUpdateAgent` = 0 or `UpdateRepo` = `owner/repo` in the policy key.
+
+Because devices install whatever you publish as the latest release, protect the GitHub account with two-factor authentication and, ideally, sign the releases.
+
 ## Command line (RMM)
 
 ```powershell
@@ -75,6 +87,7 @@ psentinel fix dotnet-runtime:6:EndOfLife remove --yes
 psentinel fix --safe --yes                       # patch supported runtimes + remove superseded patch folders
 psentinel fix --remove-unused-eol --yes          # remove EOL .NET runtimes no installed app uses
 psentinel rules update
+psentinel self-update --check                    # is a newer PatchSentinel release available?
 ```
 
 | Exit code | Meaning |
@@ -113,6 +126,8 @@ Create values under `HKLM\SOFTWARE\Policies\PatchSentinel`. Any `Schedule*` valu
 | `ScanIntervalHours` | DWORD | `12` | How often to rescan |
 | `UseEndOfLifeApi` | DWORD | `0` | Use built-in dates only |
 | `AutoUpdateRules` | DWORD | `1` | Fetch the rules catalogue daily |
+| `AutoUpdateAgent` | DWORD | `0` | Stop PatchSentinel updating itself |
+| `UpdateRepo` | String | `cookechef/PatchSentinel` | Repository to take releases from |
 | `RulesUrl` | String | `https://raw.githubusercontent.com/<org>/PatchSentinel/main/rules/eol-rules.json` | Your own catalogue |
 
 Example (PowerShell, run as admin or SYSTEM):

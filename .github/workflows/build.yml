@@ -46,7 +46,7 @@ jobs:
           $common = @('-c','Release','-r','win-x64','--self-contained','true',
                       '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true',
                       '-p:EnableCompressionInSingleFile=true','-p:DebugType=None',
-                      "-p:Version=${{ steps.ver.outputs.version }}","-p:DefaultRulesUrl=$rulesUrl",
+                      "-p:Version=${{ steps.ver.outputs.version }}","-p:DefaultRulesUrl=$rulesUrl","-p:UpdateRepo=${{ github.repository }}",
                       '-o','publish/win-x64')
           dotnet publish src/PatchSentinel.Agent @common
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -79,7 +79,12 @@ jobs:
 
       - name: Portable zip
         shell: pwsh
-        run: Compress-Archive -Path publish/win-x64/* -DestinationPath "out/PatchSentinel-${{ steps.ver.outputs.version }}-win-x64-portable.zip"
+        run: |
+          Compress-Archive -Path publish/win-x64/* -DestinationPath "out/PatchSentinel-${{ steps.ver.outputs.version }}-win-x64-portable.zip"
+          # Checksums used by the self-updater (in addition to GitHub's own asset digests).
+          Get-ChildItem out/*.msi, out/*.zip | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content -Path out/SHA256SUMS.txt -Encoding ascii
+          Get-Content out/SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v5
         with:
@@ -87,10 +92,11 @@ jobs:
           path: |
             out/*.msi
             out/*.zip
+            out/SHA256SUMS.txt
 
       - name: Create GitHub release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release create "${{ github.ref_name }}" (Get-ChildItem out/*.msi).FullName (Get-ChildItem out/*.zip).FullName --title "PatchSentinel ${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" (Get-ChildItem out/*.msi).FullName (Get-ChildItem out/*.zip).FullName out/SHA256SUMS.txt --title "PatchSentinel ${{ github.ref_name }}" --generate-notes

@@ -9,6 +9,8 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Raw URL of the EOL rules catalogue. CI sets this to your GitHub repo automatically. -->
     <DefaultRulesUrl Condition="'$(DefaultRulesUrl)' == ''"></DefaultRulesUrl>
+    <!-- owner/repo used for self-updates from GitHub Releases. CI sets this automatically. -->
+    <UpdateRepo Condition="'$(UpdateRepo)' == ''"></UpdateRepo>
     <NoWarn>$(NoWarn);CA1416;SYSLIB1054</NoWarn>
   </PropertyGroup>
 </Project>

@@ -225,7 +225,7 @@ public partial class MainWindow : Window
             st.LastScanAt is { } l ? $"Last scan {l.LocalDateTime:dd MMM HH:mm}" : "Not scanned yet",
             st.NextScanAt is { } n ? $"next scan {n.LocalDateTime:dd MMM HH:mm}" : null,
             st.LastJob is { } j ? $"last task: {j.Name} - {j.Message}" : null,
-            $"agent {st.Version}",
+            st.AvailableVersion is { } av ? $"agent {st.Version} (version {av} will install automatically)" : $"agent {st.Version}",
         }.Where(s => s is not null));
     }
 

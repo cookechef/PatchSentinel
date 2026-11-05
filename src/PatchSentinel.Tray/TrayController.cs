@@ -115,6 +115,29 @@ public sealed class TrayController : IDisposable
         UpdateTooltip();
         RaiseNotifications();
         StatusChanged?.Invoke(this, EventArgs.Empty);
+        RestartIfUpdated();
+    }
+
+    private bool _restartAttempted;
+
+    /// <summary>
+    /// A silent self-update replaces this exe while it is running. When the agent reports a newer version and the
+    /// file on disk is newer than this process, restart into it (once, so a pending-reboot replacement cannot loop).
+    /// </summary>
+    private void RestartIfUpdated()
+    {
+        if (_restartAttempted || Status is null || VersionUtil.Compare(Status.Version, AppPaths.Version) <= 0) return;
+        try
+        {
+            var path = Environment.ProcessPath;
+            if (path is null) return;
+            var onDisk = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).ProductVersion;
+            if (VersionUtil.Compare(onDisk, AppPaths.Version) <= 0) return;
+            _restartAttempted = true;
+            AppLog.Info($"Tray restarting into PatchSentinel {onDisk}.");
+            _app.RestartIntoNewVersion();
+        }
+        catch (Exception ex) { AppLog.Warn($"Update restart check failed: {ex.Message}"); }
     }
 
     private void UpdateTooltip()

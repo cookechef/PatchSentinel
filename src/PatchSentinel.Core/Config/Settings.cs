@@ -82,6 +82,10 @@ public sealed class AgentSettings
     public bool UseEndOfLifeApi { get; set; } = true;
     public bool AutoUpdateRules { get; set; } = true;
     public string? RulesUrl { get; set; }
+    /// <summary>Install new PatchSentinel releases automatically.</summary>
+    public bool AutoUpdateAgent { get; set; } = true;
+    /// <summary>GitHub owner/repo to update from; defaults to the repo the build came from.</summary>
+    public string? UpdateRepo { get; set; }
     public bool AllowUserExclusions { get; set; } = true;
     public bool AllowUserRemediation { get; set; } = true;
     public bool AllowUserDeferral { get; set; } = true;
@@ -98,6 +102,7 @@ public sealed class EffectiveSettings
     public bool ManagedByPolicy { get; set; }
 
     public string? EffectiveRulesUrl => string.IsNullOrWhiteSpace(Settings.RulesUrl) ? AppPaths.BuiltInRulesUrl : Settings.RulesUrl;
+    public string? EffectiveUpdateRepo => string.IsNullOrWhiteSpace(Settings.UpdateRepo) ? AppPaths.BuiltInUpdateRepo : Settings.UpdateRepo;
 }
 
 public static class SettingsStore
@@ -141,6 +146,8 @@ public static class PolicyReader
             if (Bool(k, "AllowUserDeferral") is { } aud) s.AllowUserDeferral = aud;
             if (Bool(k, "UseEndOfLifeApi") is { } eol) s.UseEndOfLifeApi = eol;
             if (Bool(k, "AutoUpdateRules") is { } aur2) s.AutoUpdateRules = aur2;
+            if (Bool(k, "AutoUpdateAgent") is { } aua) s.AutoUpdateAgent = aua;
+            if (k.GetValue("UpdateRepo") is string repo && repo.Contains('/')) s.UpdateRepo = repo.Trim();
             if (Int(k, "NearingEolWarningDays") is { } ned) s.NearingEolWarningDays = Math.Clamp(ned, 0, 730);
             if (Int(k, "ScanIntervalHours") is { } sih) s.ScanIntervalHours = Math.Clamp(sih, 1, 168);
             if (k.GetValue("RulesUrl") is string url && url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) s.RulesUrl = url;

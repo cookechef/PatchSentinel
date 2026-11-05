@@ -1,0 +1,96 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      # Optional code signing: add a base64 PFX and its password as repository secrets.
+      SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+      SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Work out version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}".TrimStart('v') }
+          else { $v = "0.1.${{ github.run_number }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $v"
+
+      - name: Unit tests
+        run: dotnet test tests/PatchSentinel.Core.Tests -c Release
+
+      - name: Publish agent and tray app (self-contained, single file)
+        shell: pwsh
+        run: |
+          $rulesUrl = "https://raw.githubusercontent.com/${{ github.repository }}/main/rules/eol-rules.json"
+          $common = @('-c','Release','-r','win-x64','--self-contained','true',
+                      '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true',
+                      '-p:EnableCompressionInSingleFile=true','-p:DebugType=None',
+                      "-p:Version=${{ steps.ver.outputs.version }}","-p:DefaultRulesUrl=$rulesUrl",
+                      '-o','publish/win-x64')
+          dotnet publish src/PatchSentinel.Agent @common
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet publish src/PatchSentinel.Tray @common
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item rules/eol-rules.json publish/win-x64/
+          Get-ChildItem publish/win-x64
+
+      - name: Sign executables (optional)
+        if: ${{ env.SIGNING_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /f $pfx /p $env:SIGNING_PFX_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 publish/win-x64/psentinel.exe publish/win-x64/PatchSentinel.Tray.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Build MSI
+        run: dotnet build installer/PatchSentinel.Installer.wixproj -c Release -p:ProductVersion=${{ steps.ver.outputs.version }} -p:PublishDir=${{ github.workspace }}\publish\win-x64 -o out
+
+      - name: Sign MSI (optional)
+        if: ${{ env.SIGNING_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /f $pfx /p $env:SIGNING_PFX_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 (Get-ChildItem out/*.msi).FullName
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path publish/win-x64/* -DestinationPath "out/PatchSentinel-${{ steps.ver.outputs.version }}-win-x64-portable.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PatchSentinel-${{ steps.ver.outputs.version }}
+          path: |
+            out/*.msi
+            out/*.zip
+
+      - name: Create GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create "${{ github.ref_name }}" (Get-ChildItem out/*.msi).FullName (Get-ChildItem out/*.zip).FullName --title "PatchSentinel ${{ github.ref_name }}" --generate-notes

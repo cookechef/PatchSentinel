@@ -1,0 +1,72 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="PatchSentinel"
+           Manufacturer="PatchSentinel contributors"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="6F0C3E39-2B3B-4C55-9A0B-5C7E1E6E8A41"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="PatchSentinel - winget patching and end-of-life software remediation" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of PatchSentinel is already installed." Schedule="afterInstallInitialize" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="PatchSentinelIcon" SourceFile="$(var.AssetsDir)\patchsentinel.ico" />
+    <Property Id="ARPPRODUCTICON" Value="PatchSentinelIcon" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="PatchSentinel">
+
+        <Component Id="AgentComponent" Bitness="always64">
+          <File Id="AgentExe" Source="$(var.PublishDir)\psentinel.exe" KeyPath="yes" />
+          <ServiceInstall Id="AgentServiceInstall"
+                          Name="PatchSentinelAgent"
+                          DisplayName="PatchSentinel Agent"
+                          Description="Installs app updates with winget on the chosen schedule and detects end-of-life software."
+                          Type="ownProcess" Start="auto" ErrorControl="normal"
+                          Account="LocalSystem" Arguments="service" Vital="yes" />
+          <ServiceControl Id="AgentServiceControl" Name="PatchSentinelAgent" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+
+        <Component Id="TrayComponent" Bitness="always64">
+          <File Id="TrayExe" Source="$(var.PublishDir)\PatchSentinel.Tray.exe" KeyPath="yes" />
+          <!-- Start the tray app for every user at sign-in. -->
+          <RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+                         Name="PatchSentinel" Type="string" Value="&quot;[#TrayExe]&quot;" />
+        </Component>
+
+        <Component Id="RulesComponent" Bitness="always64">
+          <File Id="RulesJson" Source="$(var.PublishDir)\eol-rules.json" KeyPath="yes" />
+        </Component>
+
+        <!-- Put psentinel.exe on the system PATH for admins and RMM scripts. -->
+        <Component Id="PathComponent" Guid="9B2F1D7E-5D3C-4A0E-8C61-2E6C1A0B7F12" Bitness="always64">
+          <Environment Id="PatchSentinelPath" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+          <RegistryValue Root="HKLM" Key="SOFTWARE\PatchSentinel" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="3C8E6A54-1F0B-4E27-9D3A-7B5F2C9E4D10">
+        <Shortcut Id="TrayShortcut" Name="PatchSentinel" Description="Patch status and legacy software"
+                  Target="[#TrayExe]" Arguments="--show" WorkingDirectory="INSTALLFOLDER" Icon="PatchSentinelIcon" />
+        <RegistryValue Root="HKCU" Key="Software\PatchSentinel" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="PatchSentinel" Level="1">
+      <ComponentRef Id="AgentComponent" />
+      <ComponentRef Id="TrayComponent" />
+      <ComponentRef Id="RulesComponent" />
+      <ComponentRef Id="PathComponent" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- Launch the tray app after an interactive install (skipped for silent RMM installs). -->
+    <CustomAction Id="LaunchTray" FileRef="TrayExe" ExeCommand="--show" Return="asyncNoWait" Impersonate="yes" />
+    <InstallExecuteSequence>
+      <Custom Action="LaunchTray" After="InstallFinalize" Condition="NOT Installed AND UILevel &gt;= 4" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

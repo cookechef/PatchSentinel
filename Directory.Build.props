@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version Condition="'$(Version)' == ''">0.1.0</Version>
+    <Company>PatchSentinel contributors</Company>
+    <Product>PatchSentinel</Product>
+    <Copyright>Copyright (c) 2026 PatchSentinel contributors. MIT licence.</Copyright>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Raw URL of the EOL rules catalogue. CI sets this to your GitHub repo automatically. -->
+    <DefaultRulesUrl Condition="'$(DefaultRulesUrl)' == ''"></DefaultRulesUrl>
+    <NoWarn>$(NoWarn);CA1416;SYSLIB1054</NoWarn>
+  </PropertyGroup>
+</Project>

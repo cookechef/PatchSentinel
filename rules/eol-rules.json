@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.11.05",
+  "rules": [
+    {
+      "id": "dotnet-runtime",
+      "title": "Microsoft .NET {cycle} Runtime",
+      "product": ".NET Runtime (Microsoft.NETCore.App)",
+      "category": "Runtime",
+      "match": { "sources": ["DotNetSharedFramework"], "namePattern": "^Microsoft\\.NETCore\\.App$" },
+      "endOfLifeProduct": "dotnet",
+      "checkLatestPatch": true,
+      "cycles": [
+        { "cycle": "1.0", "eol": "2019-06-27" },
+        { "cycle": "1.1", "eol": "2019-06-27" },
+        { "cycle": "2.0", "eol": "2018-10-01" },
+        { "cycle": "2.1", "eol": "2021-08-21" },
+        { "cycle": "2.2", "eol": "2019-12-23" },
+        { "cycle": "3.0", "eol": "2020-03-03" },
+        { "cycle": "3.1", "eol": "2022-12-13", "latest": "3.1.32" },
+        { "cycle": "5", "eol": "2022-05-10", "latest": "5.0.17" },
+        { "cycle": "6", "eol": "2024-11-12", "latest": "6.0.36" },
+        { "cycle": "7", "eol": "2024-05-14", "latest": "7.0.20" },
+        { "cycle": "8", "eol": "2026-11-10" },
+        { "cycle": "9", "eol": "2026-11-10" },
+        { "cycle": "10", "eol": "2028-11-14" }
+      ],
+      "wingetIdTemplate": "Microsoft.DotNet.Runtime.{major}",
+      "replacement": ".NET 10 Runtime (LTS, supported to November 2028)",
+      "replacementWingetId": "Microsoft.DotNet.Runtime.10",
+      "advice": "Runtimes are installed side by side and are not removed when an app is uninstalled, so old versions linger. Remove versions no application needs and keep supported releases on the latest patch.",
+      "references": [
+        "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core",
+        "https://learn.microsoft.com/dotnet/core/install/remove-runtime-sdk-versions"
+      ]
+    },
+    {
+      "id": "dotnet-aspnetcore",
+      "title": "Microsoft ASP.NET Core {cycle} Runtime",
+      "product": "ASP.NET Core Runtime (Microsoft.AspNetCore.App)",
+      "category": "Runtime",
+      "match": { "sources": ["DotNetSharedFramework"], "namePattern": "^Microsoft\\.AspNetCore\\.(App|All)$" },
+      "endOfLifeProduct": "dotnet",
+      "checkLatestPatch": true,
+      "cycles": [
+        { "cycle": "2.1", "eol": "2021-08-21" },
+        { "cycle": "2.2", "eol": "2019-12-23" },
+        { "cycle": "3.0", "eol": "2020-03-03" },
+        { "cycle": "3.1", "eol": "2022-12-13", "latest": "3.1.32" },
+        { "cycle": "5", "eol": "2022-05-10", "latest": "5.0.17" },
+        { "cycle": "6", "eol": "2024-11-12", "latest": "6.0.36" },
+        { "cycle": "7", "eol": "2024-05-14", "latest": "7.0.20" },
+        { "cycle": "8", "eol": "2026-11-10" },
+        { "cycle": "9", "eol": "2026-11-10" },
+        { "cycle": "10", "eol": "2028-11-14" }
+      ],
+      "wingetIdTemplate": "Microsoft.DotNet.AspNetCore.{major}",
+      "replacement": "ASP.NET Core 10 Runtime (LTS)",
+      "replacementWingetId": "Microsoft.DotNet.AspNetCore.10",
+      "advice": "On IIS web servers install the matching Hosting Bundle (winget id Microsoft.DotNet.HostingBundle.10) rather than the plain runtime.",
+      "references": [ "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core" ]
+    },
+    {
+      "id": "dotnet-desktop",
+      "title": "Microsoft Windows Desktop Runtime {cycle}",
+      "product": ".NET Desktop Runtime (Microsoft.WindowsDesktop.App)",
+      "category": "Runtime",
+      "match": { "sources": ["DotNetSharedFramework"], "namePattern": "^Microsoft\\.WindowsDesktop\\.App$" },
+      "endOfLifeProduct": "dotnet",
+      "checkLatestPatch": true,
+      "cycles": [
+        { "cycle": "3.0", "eol": "2020-03-03" },
+        { "cycle": "3.1", "eol": "2022-12-13", "latest": "3.1.32" },
+        { "cycle": "5", "eol": "2022-05-10", "latest": "5.0.17" },
+        { "cycle": "6", "eol": "2024-11-12", "latest": "6.0.36" },
+        { "cycle": "7", "eol": "2024-05-14", "latest": "7.0.20" },
+        { "cycle": "8", "eol": "2026-11-10" },
+        { "cycle": "9", "eol": "2026-11-10" },
+        { "cycle": "10", "eol": "2028-11-14" }
+      ],
+      "wingetIdTemplate": "Microsoft.DotNet.DesktopRuntime.{major}",
+      "replacement": ".NET 10 Desktop Runtime (LTS)",
+      "replacementWingetId": "Microsoft.DotNet.DesktopRuntime.10",
+      "references": [ "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core" ]
+    },
+    {
+      "id": "dotnet-sdk",
+      "title": "Microsoft .NET {cycle} SDK",
+      "product": ".NET SDK",
+      "category": "Developer tools",
+      "match": { "sources": ["DotNetSdk"], "namePattern": "^Microsoft \\.NET SDK$" },
+      "endOfLifeProduct": "dotnet",
+      "checkLatestPatch": false,
+      "cycles": [
+        { "cycle": "1.0", "eol": "2019-06-27" },
+        { "cycle": "1.1", "eol": "2019-06-27" },
+        { "cycle": "2.0", "eol": "2018-10-01" },
+        { "cycle": "2.1", "eol": "2021-08-21" },
+        { "cycle": "2.2", "eol": "2019-12-23" },
+        { "cycle": "3.0", "eol": "2020-03-03" },
+        { "cycle": "3.1", "eol": "2022-12-13" },
+        { "cycle": "5", "eol": "2022-05-10" },
+        { "cycle": "6", "eol": "2024-11-12" },
+        { "cycle": "7", "eol": "2024-05-14" },
+        { "cycle": "8", "eol": "2026-11-10" },
+        { "cycle": "9", "eol": "2026-11-10" },
+        { "cycle": "10", "eol": "2028-11-14" }
+      ],
+      "replacement": ".NET 10 SDK",
+      "replacementWingetId": "Microsoft.DotNet.SDK.10",
+      "advice": "SDKs are only needed on developer machines. Each SDK also carries its own runtime, so remove old SDKs as well as runtimes.",
+      "references": [ "https://learn.microsoft.com/dotnet/core/additional-tools/uninstall-tool" ]
+    },
+    {
+      "id": "dotnet-framework",
+      "title": "Microsoft .NET Framework {cycle}",
+      "product": ".NET Framework",
+      "category": "Runtime",
+      "match": { "sources": ["DotNetFramework"], "namePattern": "^\\.NET Framework$" },
+      "cycles": [
+        { "cycle": "4.5", "eol": "2016-01-12" },
+        { "cycle": "4.5.1", "eol": "2016-01-12" },
+        { "cycle": "4.5.2", "eol": "2022-04-26" },
+        { "cycle": "4.6", "eol": "2022-04-26" },
+        { "cycle": "4.6.1", "eol": "2022-04-26" },
+        { "cycle": "4.6.2", "eol": "false" },
+        { "cycle": "4.7", "eol": "false" },
+        { "cycle": "4.7.1", "eol": "false" },
+        { "cycle": "4.7.2", "eol": "false" },
+        { "cycle": "4.8", "eol": "false" },
+        { "cycle": "4.8.1", "eol": "false" }
+      ],
+      "advice": ".NET Framework 4.x is updated in place. Install .NET Framework 4.8.1 (or 4.8) through Windows Update or your RMM; existing 4.x apps keep working.",
+      "references": [ "https://learn.microsoft.com/lifecycle/products/microsoft-net-framework" ]
+    },
+    {
+      "id": "access-database-engine-2010",
+      "title": "Microsoft Access Database Engine 2010",
+      "product": "Microsoft Access Database Engine 2010",
+      "category": "Runtime",
+      "match": { "namePattern": "^Microsoft Access database engine 2010" },
+      "eol": "2020-10-13",
+      "eolSeverity": "High",
+      "replacement": "Microsoft 365 Access Runtime",
+      "advice": "Usually installed by an application that reads Access or Excel files (ACE OLE DB / ODBC). Confirm which app needs it and ask the vendor which supported driver to use, typically the Microsoft 365 Access Runtime.",
+      "references": [ "https://learn.microsoft.com/lifecycle/products/microsoft-office-2010" ]
+    },
+    {
+      "id": "access-database-engine-2016",
+      "title": "Microsoft Access Database Engine 2016",
+      "product": "Microsoft Access Database Engine 2016",
+      "category": "Runtime",
+      "match": { "namePattern": "^Microsoft Access database engine 2016" },
+      "eol": "2025-10-14",
+      "eolSeverity": "High",
+      "replacement": "Microsoft 365 Access Runtime",
+      "advice": "Support ended with Office 2016 on 14 October 2025. It is normally installed by an app that imports Access or Excel data. Check with that vendor, then replace it with the Microsoft 365 Access Runtime (same ACE OLE DB / ODBC drivers) and remove the 2016 engine.",
+      "references": [ "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025" ]
+    },
+    {
+      "id": "office-2013",
+      "title": "Microsoft Office 2013",
+      "product": "Microsoft Office 2013",
+      "category": "Application",
+      "match": { "namePattern": "^Microsoft Office .*\\b2013\\b", "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)" },
+      "eol": "2023-04-11",
+      "advice": "Move to Microsoft 365 Apps or a supported Office LTSC release.",
+      "references": [ "https://learn.microsoft.com/lifecycle/products/microsoft-office-2013" ]
+    },
+    {
+      "id": "office-2016",
+      "title": "Microsoft Office 2016",
+      "product": "Microsoft Office 2016",
+      "category": "Application",
+      "match": { "namePattern": "^Microsoft Office .*\\b2016\\b", "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)" },
+      "eol": "2025-10-14",
+      "advice": "Office 2016 reached end of support on 14 October 2025. Move to Microsoft 365 Apps or Office LTSC 2024.",
+      "references": [ "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025" ]
+    },
+    {
+      "id": "office-2019",
+      "title": "Microsoft Office 2019",
+      "product": "Microsoft Office 2019",
+      "category": "Application",
+      "match": { "namePattern": "^Microsoft Office .*\\b2019\\b", "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)" },
+      "eol": "2025-10-14",
+      "advice": "Office 2019 reached end of support on 14 October 2025. Move to Microsoft 365 Apps or Office LTSC 2024.",
+      "references": [ "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025" ]
+    },
+    {
+      "id": "vcredist-legacy",
+      "title": "Microsoft Visual C++ {cycle} Redistributable",
+      "product": "Microsoft Visual C++ Redistributable",
+      "category": "Runtime",
+      "match": { "namePattern": "^Microsoft Visual C\\+\\+ (2005|2008|2010|2012|2013) .*Redistributable", "versionFromName": true },
+      "cycles": [
+        { "cycle": "2005", "eol": "2016-04-12" },
+        { "cycle": "2008", "eol": "2018-04-10" },
+        { "cycle": "2010", "eol": "2020-07-14" },
+        { "cycle": "2012", "eol": "2023-01-10" },
+        { "cycle": "2013", "eol": "2024-04-09" }
+      ],
+      "eolSeverity": "High",
+      "advice": "These are installed by older applications, and the current Visual C++ 2015-2022 package does not replace them. Check which apps use the old version (or test by removing it on one device first) before removing it across the estate.",
+      "references": [ "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist" ]
+    },
+    {
+      "id": "python",
+      "title": "Python {cycle}",
+      "product": "Python",
+      "category": "Runtime",
+      "match": { "namePattern": "^Python \\d+\\.\\d+\\.\\d+ \\((32|64)-bit\\)$", "versionFromName": true },
+      "endOfLifeProduct": "python",
+      "checkLatestPatch": true,
+      "cycles": [
+        { "cycle": "2.7", "eol": "2020-01-01" },
+        { "cycle": "3.5", "eol": "2020-09-13" },
+        { "cycle": "3.6", "eol": "2021-12-23" },
+        { "cycle": "3.7", "eol": "2023-06-27" },
+        { "cycle": "3.8", "eol": "2024-10-07" },
+        { "cycle": "3.9", "eol": "2025-10-31" },
+        { "cycle": "3.10", "eol": "2026-10-31" },
+        { "cycle": "3.11", "eol": "2027-10-31" },
+        { "cycle": "3.12", "eol": "2028-10-31" },
+        { "cycle": "3.13", "eol": "2029-10-31" }
+      ],
+      "outdatedSeverity": "Medium",
+      "wingetIdTemplate": "Python.Python.{major}.{minor}",
+      "replacement": "Python 3.13",
+      "replacementWingetId": "Python.Python.3.13",
+      "references": [ "https://devguide.python.org/versions/" ]
+    },
+    {
+      "id": "nodejs",
+      "title": "Node.js {cycle}",
+      "product": "Node.js",
+      "category": "Runtime",
+      "match": { "namePattern": "^Node\\.js$" },
+      "endOfLifeProduct": "nodejs",
+      "checkLatestPatch": true,
+      "cycles": [
+        { "cycle": "12", "eol": "2022-04-30" },
+        { "cycle": "14", "eol": "2023-04-30" },
+        { "cycle": "16", "eol": "2023-09-11" },
+        { "cycle": "18", "eol": "2025-04-30" },
+        { "cycle": "20", "eol": "2026-04-30" },
+        { "cycle": "22", "eol": "2027-04-30" },
+        { "cycle": "24", "eol": "2028-04-30" }
+      ],
+      "replacement": "Node.js LTS",
+      "replacementWingetId": "OpenJS.NodeJS.LTS",
+      "references": [ "https://nodejs.org/en/about/previous-releases" ]
+    },
+    {
+      "id": "powershell",
+      "title": "PowerShell {cycle}",
+      "product": "PowerShell 7",
+      "category": "Runtime",
+      "match": { "namePattern": "^PowerShell 7(\\.\\d+)*-(x64|x86|arm64)$" },
+      "endOfLifeProduct": "powershell",
+      "checkLatestPatch": true,
+      "cycles": [
+        { "cycle": "7.0", "eol": "2022-12-03" },
+        { "cycle": "7.1", "eol": "2022-05-08" },
+        { "cycle": "7.2", "eol": "2024-11-08" },
+        { "cycle": "7.3", "eol": "2024-05-08" },
+        { "cycle": "7.4", "eol": "2026-11-10" }
+      ],
+      "wingetIdTemplate": "Microsoft.PowerShell",
+      "replacement": "PowerShell 7.6 (LTS)",
+      "replacementWingetId": "Microsoft.PowerShell",
+      "advice": "PowerShell 7 follows the lifecycle of the .NET release it is built on. Windows PowerShell 5.1 is part of Windows and is not affected.",
+      "references": [ "https://learn.microsoft.com/powershell/scripting/install/powershell-support-lifecycle" ]
+    },
+    {
+      "id": "java-legacy",
+      "title": "Java SE {cycle}",
+      "product": "Oracle Java SE",
+      "category": "Runtime",
+      "match": { "namePattern": "^Java(\\(TM\\))? (6|7) Update \\d+", "versionFromName": true },
+      "cycles": [
+        { "cycle": "6", "eol": "2018-12-31" },
+        { "cycle": "7", "eol": "2022-07-31" }
+      ],
+      "advice": "Remove Java 6/7. If an app needs Java, use a supported build such as Eclipse Temurin or Microsoft Build of OpenJDK.",
+      "references": [ "https://www.oracle.com/java/technologies/java-se-support-roadmap.html" ]
+    },
+    {
+      "id": "adobe-flash",
+      "title": "Adobe Flash Player",
+      "product": "Adobe Flash Player",
+      "category": "Plug-in",
+      "match": { "namePattern": "^Adobe Flash Player" },
+      "eol": "2020-12-31",
+      "advice": "Flash is dead and blocked by browsers. Remove it."
+    },
+    {
+      "id": "silverlight",
+      "title": "Microsoft Silverlight",
+      "product": "Microsoft Silverlight",
+      "category": "Plug-in",
+      "match": { "namePattern": "^Microsoft Silverlight" },
+      "eol": "2021-10-12",
+      "advice": "Silverlight is no longer supported by any current browser. Remove it."
+    },
+    {
+      "id": "sql-server-legacy",
+      "title": "Microsoft SQL Server {cycle}",
+      "product": "Microsoft SQL Server",
+      "category": "Server",
+      "match": { "namePattern": "^Microsoft SQL Server (2005|2008|2008 R2|2012|2014) \\((32|64)-bit\\)$", "versionFromName": true },
+      "cycles": [
+        { "cycle": "2005", "eol": "2016-04-12" },
+        { "cycle": "2008", "eol": "2019-07-09" },
+        { "cycle": "2012", "eol": "2022-07-12" },
+        { "cycle": "2014", "eol": "2024-07-09" }
+      ],
+      "advice": "Migrate the databases to a supported SQL Server version (or Azure SQL) before uninstalling. Many line-of-business apps ship SQL Server Express; check with the vendor.",
+      "references": [ "https://learn.microsoft.com/lifecycle/products/?terms=sql%20server" ]
+    },
+    {
+      "id": "adobe-reader-xi",
+      "title": "Adobe Reader / Acrobat XI",
+      "product": "Adobe Acrobat XI",
+      "category": "Application",
+      "match": { "namePattern": "^Adobe (Reader|Acrobat) XI" },
+      "eol": "2017-10-15",
+      "replacement": "Adobe Acrobat Reader",
+      "replacementWingetId": "Adobe.Acrobat.Reader.64-bit"
+    },
+    {
+      "id": "adobe-acrobat-classic",
+      "title": "Adobe Acrobat {cycle}",
+      "product": "Adobe Acrobat (Classic track)",
+      "category": "Application",
+      "match": { "namePattern": "^Adobe Acrobat( Reader)? (2015|2017|2020)\\b", "versionFromName": true },
+      "cycles": [
+        { "cycle": "2015", "eol": "2020-04-07" },
+        { "cycle": "2017", "eol": "2022-06-06" },
+        { "cycle": "2020", "eol": "2025-06-30" }
+      ],
+      "replacement": "Adobe Acrobat Reader",
+      "replacementWingetId": "Adobe.Acrobat.Reader.64-bit"
+    }
+  ]
+}

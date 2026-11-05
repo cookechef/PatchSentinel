@@ -1,0 +1,17 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!--
+    Build on Windows after publishing the agent and tray app into $(PublishDir):
+      dotnet build installer\PatchSentinel.Installer.wixproj -c Release -p:ProductVersion=1.0.0 -p:PublishDir=<path>\publish\win-x64
+  -->
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\publish\win-x64</PublishDir>
+    <OutputName>PatchSentinel-$(ProductVersion)-x64</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <DefineConstants>ProductVersion=$(ProductVersion);PublishDir=$(PublishDir);AssetsDir=$(MSBuildThisFileDirectory)..\assets</DefineConstants>
+    <SuppressIces>ICE57</SuppressIces>
+  </PropertyGroup>
+
+</Project>

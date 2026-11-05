@@ -184,6 +184,15 @@ public class WingetParserTests
     }
 
     [Fact]
+    public void Windows_managed_framework_packages_are_excluded()
+    {
+        var list = ExclusionMatcher.Apply([new UpdateCandidate { Name = "Microsoft.WindowsAppRuntime.1.8", Id = "Microsoft.WindowsAppRuntime.1.8", InstalledVersion = "1.8.4", AvailableVersion = "1.8.10" }], [], []);
+        var u = Assert.Single(list);
+        Assert.True(u.ManagedByWindows);
+        Assert.False(u.Installable);
+    }
+
+    [Fact]
     public void Exclusions_support_wildcards()
     {
         var list = ExclusionMatcher.Apply(WingetOutputParser.ParseUpgradeTable(Sample), ["7zip.*"], ["Zoom.Zoom"]);

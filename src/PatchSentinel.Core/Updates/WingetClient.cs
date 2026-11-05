@@ -123,11 +123,23 @@ public static class ExclusionMatcher
         return false;
     }
 
+    /// <summary>
+    /// Packages winget lists as upgradable that it cannot meaningfully upgrade from a service: MSIX framework
+    /// packages (installed side by side per user, so an old version always remains and the update never clears)
+    /// and App Installer itself (upgrading it kills the running winget).
+    /// </summary>
+    public static readonly string[] ManagedByWindowsPatterns =
+    [
+        "Microsoft.WindowsAppRuntime.*", "Microsoft.VCLibs.*", "Microsoft.UI.Xaml.*", "Microsoft.NET.Native.*",
+        "Microsoft.DesktopAppInstaller", "Microsoft.AppInstaller", "Microsoft.WindowsTerminal", "Microsoft.Edge*", "Microsoft.Teams*",
+    ];
+
     public static List<UpdateCandidate> Apply(IEnumerable<UpdateCandidate> updates, IReadOnlyCollection<string> userPatterns, IReadOnlyCollection<string> policyPatterns) =>
         updates.Select(u =>
         {
             var byPolicy = IsMatch(policyPatterns, u.Id, u.Name);
             var byUser = IsMatch(userPatterns, u.Id, u.Name);
-            return u with { Excluded = byPolicy || byUser, ExcludedByPolicy = byPolicy };
+            var windows = IsMatch(ManagedByWindowsPatterns, u.Id);
+            return u with { Excluded = byPolicy || byUser || windows, ExcludedByPolicy = byPolicy, ManagedByWindows = windows };
         }).ToList();
 }

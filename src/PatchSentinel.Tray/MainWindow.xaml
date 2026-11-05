@@ -80,20 +80,39 @@
             <TabItem Header="App updates" x:Name="UpdatesTab">
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" x:Name="UpdatesIntro" TextWrapping="Wrap" Margin="0,0,0,10"
-                               Text="Updates found by winget. Tick Exclude for apps that must not be updated automatically, then Save exclusions."/>
+                               Text="Updates found by winget. Tick Update and choose Install ticked, or tick Exclude for apps that must never be updated automatically, then Save exclusions."/>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                         <Button Content="Check for updates" Click="ScanNow_Click"/>
-                        <Button x:Name="InstallSelectedButton" Content="Install selected" Click="InstallSelected_Click"/>
+                        <Button x:Name="InstallSelectedButton" Content="Install ticked" Click="InstallSelected_Click"/>
                         <Button Content="Install all (except excluded)" Click="UpdateAll_Click" Style="{StaticResource Primary}"/>
                         <Button x:Name="SaveExclusionsButton" Content="Save exclusions" Click="SaveExclusions_Click"/>
                         <Button x:Name="UserUpdatesButton" Content="Update my per-user apps" Click="UserUpdates_Click"
                                 ToolTip="Runs winget in your own account for apps installed only for you"/>
                     </WrapPanel>
+                    <Expander DockPanel.Dock="Bottom" x:Name="UpdateResultsExpander" Header="Last update run" Margin="0,10,0,0" Visibility="Collapsed">
+                        <TextBox x:Name="UpdateResultsText" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12"
+                                 MaxHeight="160" VerticalScrollBarVisibility="Auto" BorderThickness="0" Background="#FAFAFA" Padding="6"/>
+                    </Expander>
                     <DataGrid x:Name="UpdatesGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E6E6E6"
                               Background="White" BorderBrush="#E0E0E0" RowHeaderWidth="0">
                         <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="Exclude" Binding="{Binding Excluded, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
+                            <DataGridTemplateColumn Header="Update" Width="62">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanSelect}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Tick to include in 'Install ticked'"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Exclude" Width="62">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Excluded, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanExclude}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Never update this app automatically (then Save exclusions)"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Application" Binding="{Binding Name}" IsReadOnly="True" Width="2*"/>
                             <DataGridTextColumn Header="Package ID" Binding="{Binding Id}" IsReadOnly="True" Width="2*"/>
                             <DataGridTextColumn Header="Installed" Binding="{Binding Installed}" IsReadOnly="True" Width="*"/>

@@ -150,6 +150,7 @@ internal sealed class AgentEngine
         job.FinishedAt = DateTimeOffset.Now;
         lock (_gate) _lastJob = job;
         AppLog.Info($"Job finished: {name} - {(job.Success ? "OK" : "FAILED")} - {job.Message}");
+        foreach (var line in job.Details) AppLog.Info($"  {line}");
         return true;
     }
 
@@ -198,7 +199,7 @@ internal sealed class AgentEngine
             details.Add($"{(r.Success ? "OK  " : "FAIL")} {u.Name} {u.InstalledVersion} -> {u.AvailableVersion}: {r.Message}");
         }
         foreach (var skipped in available.Where(u => !u.Installable && (ids is null || ids.Contains(u.Id, StringComparer.OrdinalIgnoreCase))))
-            details.Add($"SKIP {skipped.Name}: {(skipped.Excluded ? "excluded" : skipped.RequiresExplicit ? "pinned/explicit only" : "id truncated by winget")}");
+            details.Add($"SKIP {skipped.Name}: {(skipped.ManagedByWindows ? "updated by Windows" : skipped.Excluded ? "excluded" : skipped.RequiresExplicit ? "pinned/explicit only" : "id truncated by winget")}");
 
         if (scheduled)
         {
@@ -209,10 +210,28 @@ internal sealed class AgentEngine
         }
 
         await ScanAsync(ct);
+
+        // winget sometimes reports success while the old version is still detected (e.g. side-by-side packages).
+        List<UpdateCandidate> still;
+        lock (_gate) still = _lastScan?.Updates ?? [];
+        var notApplied = 0;
+        foreach (var u in targets)
+        {
+            var after = still.FirstOrDefault(x => x.Id.Equals(u.Id, StringComparison.OrdinalIgnoreCase));
+            if (after is not null && VersionUtil.Compare(after.InstalledVersion, u.InstalledVersion) <= 0
+                && details.Any(d => d.StartsWith("OK", StringComparison.Ordinal) && d.Contains(u.Name, StringComparison.Ordinal)))
+            {
+                notApplied++;
+                details.Add($"WARN {u.Name}: winget reported success but {u.InstalledVersion} is still detected. The app may need closing, a restart, or updating in the user's own session ('Update my per-user apps').");
+            }
+        }
+
+        var installed = targets.Count - failures - notApplied;
         return new JobInfo
         {
-            Success = failures == 0,
-            Message = targets.Count == 0 ? "No updates to install." : $"Installed {targets.Count - failures} of {targets.Count} update(s).",
+            Success = failures == 0 && notApplied == 0,
+            Message = targets.Count == 0 ? "No updates to install."
+                : $"Updated {installed} of {targets.Count} app(s)" + (failures > 0 ? $", {failures} failed" : "") + (notApplied > 0 ? $", {notApplied} still showing as outdated" : "") + ".",
             Details = details,
         };
     }

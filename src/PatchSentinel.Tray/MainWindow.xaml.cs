@@ -30,6 +30,8 @@ public sealed class FindingRow
 public sealed class UpdateRow : INotifyPropertyChanged
 {
     private bool _excluded;
+    private bool _selected;
+    private bool _exclusionsAllowed = true;
     public UpdateCandidate Candidate { get; init; } = new();
     public string Name => Candidate.Name;
     public string Id => Candidate.Id;
@@ -43,11 +45,34 @@ public sealed class UpdateRow : INotifyPropertyChanged
         get => _excluded;
         set
         {
-            if (PolicyLocked) value = true; // policy exclusions cannot be cleared here
+            if (PolicyLocked || Candidate.ManagedByWindows) value = true; // cannot be cleared here
             if (_excluded == value) return;
             _excluded = value;
+            if (value) Selected = false;
+            OnChanged();
+            OnChanged(nameof(CanSelect));
+        }
+    }
+
+    /// <summary>Ticked for "Install ticked".</summary>
+    public bool Selected
+    {
+        get => _selected;
+        set
+        {
+            if (value && !CanSelect) value = false;
+            if (_selected == value) return;
+            _selected = value;
             OnChanged();
         }
+    }
+
+    public bool CanSelect => !Excluded && !Candidate.IdTruncated && !Candidate.RequiresExplicit;
+    public bool CanExclude => _exclusionsAllowed && !PolicyLocked && !Candidate.ManagedByWindows;
+
+    public bool ExclusionsAllowed
+    {
+        set { _exclusionsAllowed = value; OnChanged(nameof(CanExclude)); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -151,6 +176,7 @@ public partial class MainWindow : Window
         }
 
         RenderCounts(st.Counts);
+        RenderLastUpdateRun(st);
         var c = st.Counts;
         if (busy)
         {
@@ -203,6 +229,19 @@ public partial class MainWindow : Window
         }.Where(s => s is not null));
     }
 
+    private void RenderLastUpdateRun(AgentStatus st)
+    {
+        if (st.LastJob is not { Kind: "updates" } job || job.FinishedAt is null) return;
+        UpdateResultsExpander.Visibility = Visibility.Visible;
+        UpdateResultsExpander.Header = $"Last update run ({job.FinishedAt.Value.LocalDateTime:dd MMM HH:mm}): {job.Message}";
+        var text = string.Join(Environment.NewLine, job.Details);
+        if (UpdateResultsText.Text != text)
+        {
+            UpdateResultsText.Text = text;
+            if (!job.Success) UpdateResultsExpander.IsExpanded = true;
+        }
+    }
+
     private void RenderCounts(ScanCounts c)
     {
         EolCount.Text = c.EndOfLife.ToString();
@@ -236,7 +275,9 @@ public partial class MainWindow : Window
             {
                 Candidate = u,
                 Excluded = u.Excluded,
-                Note = u.ExcludedByPolicy ? "Excluded by your administrator"
+                ExclusionsAllowed = _settings?.AllowUserExclusions ?? true,
+                Note = u.ManagedByWindows ? "Updated by Windows / Microsoft Store"
+                    : u.ExcludedByPolicy ? "Excluded by your administrator"
                     : pattern is not null ? $"Excluded by pattern {pattern}"
                     : u.RequiresExplicit ? "Pinned - update manually"
                     : u.IdTruncated ? "ID shortened by winget - update manually"
@@ -265,7 +306,6 @@ public partial class MainWindow : Window
         SetScheduleEditable(!_settings.ScheduleLocked);
 
         var canExclude = _settings.AllowUserExclusions;
-        UpdatesGrid.Columns[0].IsReadOnly = !canExclude;
         SaveExclusionsButton.IsEnabled = canExclude;
         SaveExclusionsButton.ToolTip = canExclude ? null : "Exclusions are managed by your administrator";
         RenderScan(); // refresh pattern notes
@@ -345,8 +385,16 @@ public partial class MainWindow : Window
 
     private async void InstallSelected_Click(object sender, RoutedEventArgs e)
     {
-        var ids = UpdatesGrid.SelectedItems.OfType<UpdateRow>().Where(r => !r.Excluded && r.Candidate.Installable).Select(r => r.Id).ToList();
-        if (ids.Count == 0) { MessageBox.Show(this, "Select one or more apps that are not excluded.", "Install selected"); return; }
+        var rows = _updates.Where(r => r.Selected).ToList();
+        if (rows.Count == 0) rows = UpdatesGrid.SelectedItems.OfType<UpdateRow>().ToList(); // highlighted rows also work
+        var ids = rows.Where(r => !r.Excluded && r.Candidate.Installable).Select(r => r.Id).ToList();
+        if (ids.Count == 0)
+        {
+            MessageBox.Show(this, rows.Count > 0
+                    ? "The apps you chose are excluded. Untick Exclude first (and Save exclusions) if you want to update them."
+                    : "Tick Update next to the apps you want to install.", "Install ticked");
+            return;
+        }
         await _tray.RunCommandAsync(Commands.InstallUpdates, new InstallUpdatesRequest(ids), $"Installing {ids.Count} update(s) in the background.");
     }
 
@@ -356,7 +404,7 @@ public partial class MainWindow : Window
         var visible = _updates.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         // Keep wildcard patterns and exclusions for apps that have no update showing right now.
         var keep = _settings.ExcludedPackageIds.Where(p => p.Contains('*') || !visible.Contains(p));
-        var ticked = _updates.Where(r => r.Excluded && !r.PolicyLocked && !r.Note.StartsWith("Excluded by pattern", StringComparison.Ordinal)).Select(r => r.Id);
+        var ticked = _updates.Where(r => r.Excluded && !r.PolicyLocked && !r.Candidate.ManagedByWindows && !r.Note.StartsWith("Excluded by pattern", StringComparison.Ordinal)).Select(r => r.Id);
         var ids = keep.Concat(ticked).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         try
         {

@@ -89,6 +89,7 @@ public static class RegistryInventory
                     RegistryKey = $@"{label}\{UninstallPath}\{name}",
                     IsSystemComponent = GetInt(k, "SystemComponent") == 1,
                     InstallDate = ParseInstallDate(k.GetValue("InstallDate") as string),
+                    VendorUrl = FirstHttpUrl(k.GetValue("URLUpdateInfo") as string, k.GetValue("URLInfoAbout") as string, k.GetValue("HelpLink") as string),
                     SizeMB = GetInt(k, "EstimatedSize") is var kb and > 0 ? Math.Round(kb / 1024.0, 1) : null,
                 });
             }
@@ -98,6 +99,9 @@ public static class RegistryInventory
             }
         }
     }
+
+    private static string? FirstHttpUrl(params string?[] values) =>
+        values.Select(v => v?.Trim()).FirstOrDefault(v => Uri.TryCreate(v, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp));
 
     private static DateOnly? ParseInstallDate(string? s)
     {

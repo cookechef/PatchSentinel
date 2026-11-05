@@ -59,6 +59,9 @@ public sealed class ManualUpdateEntry
     public DateTimeOffset FirstFailedAt { get; set; }
     public DateTimeOffset LastFailedAt { get; set; }
     public bool Flagged { get; set; }
+    public string? VendorUrl { get; set; }
+    public string? InstallerUrl { get; set; }
+    public DateTimeOffset? LinksCheckedAt { get; set; }
 }
 
 public sealed class HistoryEntry

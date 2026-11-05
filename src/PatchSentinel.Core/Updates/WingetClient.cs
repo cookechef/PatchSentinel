@@ -102,6 +102,32 @@ public sealed class WingetClient
         return new UpdateResult(id, name, ok, r.ExitCode, msg);
     }
 
+    /// <summary>Reads the vendor links from the package manifest ("winget show").</summary>
+    public async Task<PackageLinks?> ShowLinksAsync(string id, CancellationToken ct)
+    {
+        if (!IsValidId(id)) return null;
+        var r = await ProcessRunner.RunAsync(ExePath, $"show --id \"{id}\" --exact {Common}", TimeSpan.FromMinutes(2), ct);
+        return ParseShowLinks(r.StdOut);
+    }
+
+    public static PackageLinks? ParseShowLinks(string output)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var line = raw.Split('\r').Last();
+            var idx = line.IndexOf(':');
+            if (idx <= 0) continue;
+            var key = line[..idx].Trim();
+            var value = line[(idx + 1)..].Trim();
+            if (Uri.TryCreate(value, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp))
+                map.TryAdd(key, value);
+        }
+        if (map.Count == 0) return null;
+        string? Get(params string[] keys) => keys.Select(k => map.GetValueOrDefault(k)).FirstOrDefault(v => v is not null);
+        return new PackageLinks(Get("Homepage", "Package Url"), Get("Publisher Url"), Get("Publisher Support Url"), Get("Release Notes Url"), Get("Installer Url"));
+    }
+
     /// <summary>Uses "winget error &lt;code&gt;" to turn an exit code into Microsoft's description.</summary>
     public async Task<string?> DescribeErrorAsync(int code, CancellationToken ct)
     {
@@ -122,6 +148,12 @@ public sealed class WingetClient
         var lines = s.Split('\n').Select(l => l.Split('\r').Last().Trim()).Where(l => l.Length > 0 && l.Any(char.IsLetter)).ToList();
         return string.Join(" | ", lines.TakeLast(3));
     }
+}
+
+public sealed record PackageLinks(string? Homepage, string? PublisherUrl, string? SupportUrl, string? ReleaseNotesUrl, string? InstallerUrl)
+{
+    /// <summary>Best page to send a user to for a manual download.</summary>
+    public string? VendorPage => Homepage ?? SupportUrl ?? PublisherUrl ?? ReleaseNotesUrl;
 }
 
 public static class ExclusionMatcher

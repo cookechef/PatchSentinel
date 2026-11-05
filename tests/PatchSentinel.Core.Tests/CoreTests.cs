@@ -300,3 +300,18 @@ public class PlannerTests
         Assert.Equal(StepKind.MsiUninstall, Assert.Single(RemediationPlanner.RegistryUninstallSteps(msi)).Kind);
     }
 }
+
+public class WingetShowTests
+{
+    [Fact]
+    public void Show_output_links_are_parsed()
+    {
+        const string output = "Found DrayTek Smart VPN Client [DrayTek.SmartVPN]\nVersion: 5.7.3\nPublisher: DrayTek\nPublisher Url: https://www.draytek.com\n" +
+                              "Homepage: https://www.draytek.com/products/smart-vpn-client/\nLicense: Proprietary\nInstaller:\n  Installer Type: exe\n" +
+                              "  Installer Url: https://fw.draytek.com.tw/SmartVPN/Smart_VPN_Client_5.7.3.exe\n  Installer SHA256: ABC\n";
+        var links = WingetClient.ParseShowLinks(output);
+        Assert.NotNull(links);
+        Assert.Equal("https://www.draytek.com/products/smart-vpn-client/", links!.VendorPage);
+        Assert.Equal("https://fw.draytek.com.tw/SmartVPN/Smart_VPN_Client_5.7.3.exe", links.InstallerUrl);
+    }
+}

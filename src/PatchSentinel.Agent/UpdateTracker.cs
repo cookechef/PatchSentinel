@@ -48,7 +48,7 @@ internal sealed class UpdateTracker
                 var attempt = $"Failed {m.LastFailedAt.LocalDateTime:dd MMM HH:mm}" +
                               (m.Flagged ? $" ({m.Failures} times)" : $" (attempt {m.Failures} of {FailuresBeforeManual})") + $": {m.LastError}";
                 return m.Flagged
-                    ? u with { NeedsManualUpdate = true, ManualReason = m.LastError, LastAttempt = attempt }
+                    ? u with { NeedsManualUpdate = true, ManualReason = m.LastError, LastAttempt = attempt, VendorUrl = m.VendorUrl, InstallerUrl = m.InstallerUrl }
                     : u with { LastAttempt = attempt };
             }).ToList();
     }
@@ -82,6 +82,26 @@ internal sealed class UpdateTracker
             Add(new HistoryEntry { At = DateTimeOffset.Now, Kind = "Update", Name = u.Name, Id = u.Id, From = u.InstalledVersion, To = u.AvailableVersion, Success = false, Message = error, Trigger = trigger });
             Save();
             return newlyFlagged;
+        }
+    }
+
+    /// <summary>Flagged apps whose vendor links have not been looked up in the last day.</summary>
+    public List<string> NeedingLinks()
+    {
+        lock (_gate)
+            return _manual.Values.Where(m => m.Flagged && m.VendorUrl is null && (m.LinksCheckedAt is null || DateTimeOffset.Now - m.LinksCheckedAt > TimeSpan.FromDays(1)))
+                          .Select(m => m.Id).ToList();
+    }
+
+    public void SetLinks(string id, string? vendorUrl, string? installerUrl)
+    {
+        lock (_gate)
+        {
+            if (!_manual.TryGetValue(id, out var m)) return;
+            m.VendorUrl = vendorUrl;
+            m.InstallerUrl = installerUrl;
+            m.LinksCheckedAt = DateTimeOffset.Now;
+            Save();
         }
     }
 

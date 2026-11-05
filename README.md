@@ -18,7 +18,7 @@ PatchSentinel covers both jobs. It installs app updates with winget on a schedul
 | | |
 |---|---|
 | **Scheduled winget updates** | Daily or weekly at a chosen time, random start delay for fleets, reminder before the run, postpone (limited number of times), and catch-up if the PC was off. |
-| **Manual updates list** | Apps whose automatic update fails twice in a row (e.g. VPN clients with drivers) are flagged as "update manually", skipped by scheduled runs and listed with the error. They leave the list once they're up to date. Framework packages that Windows updates itself (Windows App Runtime, VCLibs and so on) are hidden from the list. |
+| **Manual updates list** | Apps whose automatic update fails twice in a row (e.g. VPN clients with drivers) are flagged as "update manually", skipped by scheduled runs and listed with the error. Each one gets a **Download page** link to the vendor's site (taken from its winget manifest), and you can copy the direct installer link. They leave the list once they're up to date. Framework packages that Windows updates itself (Windows App Runtime, VCLibs and so on) are hidden from the list. |
 | **Installed apps** | A searchable list of everything in Add/Remove Programs for all users: version, publisher, install date, size, scope and uninstall method. You can export it to CSV, copy from it, and tick several apps to uninstall them in one go. Machine-wide uninstalls ask for administrator approval through UAC, so standard users cannot remove software on their own. |
 | **History** | Every update, fix and self-update is recorded with versions, result, error and who started it. It can be copied or exported to CSV as patching evidence. |
 | **Exclusions** | Users can tick apps to exclude (wildcards such as `Adobe.*` are supported). Admins can enforce exclusions by policy, which users cannot override. |
@@ -70,7 +70,7 @@ From v0.1.4, PatchSentinel keeps itself up to date:
 
 - The agent checks your repository's **latest GitHub Release** every 6 hours, and whenever you click **Check for PatchSentinel updates** on the tray app's Overview tab.
 - When a newer version is found, the tray shows a notification with an **Install update now** button. In the default *Automatic* mode it installs by itself 15 minutes later (`SelfUpdateGraceMinutes`). In *NotifyOnly* mode it waits for someone to click Install.
-- If there is a newer version, it downloads the MSI into `C:\ProgramData\PatchSentinel\updates`. It only installs it if the file's SHA-256 matches GitHub's published digest for that asset (or the release's `SHA256SUMS.txt`). It then runs a silent upgrade. The service restarts on the new version and the tray app restarts itself, with settings and history kept.
+- If there is a newer version, it downloads the MSI into `C:\ProgramData\PatchSentinel\updates`. It only installs it if the file's SHA-256 matches GitHub's published digest for that asset (or the release's `SHA256SUMS.txt`). It then runs a silent upgrade. The service restarts on the new version and reopens the tray app for everyone who is signed in. Settings and history are kept.
 - Drafts and pre-releases are ignored, so mark a release as **pre-release** on GitHub to keep it off devices while you test it.
 - To roll out a release on demand, run `psentinel self-update` (elevated). Use `psentinel self-update --check` to just report whether an update is available (exit code 12 if so).
 - To turn it off or point devices at another repo, set `AutoUpdateAgent` = 0 or `UpdateRepo` = `owner/repo` in the policy key.

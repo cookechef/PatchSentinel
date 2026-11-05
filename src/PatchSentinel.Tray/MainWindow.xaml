@@ -178,6 +178,10 @@
                                 <MenuItem Header="Copy application name" Click="CopyColumn_Click" Tag="Name"/>
                                 <MenuItem Header="Copy package ID" Click="CopyColumn_Click" Tag="Id"/>
                                 <Separator/>
+                                <MenuItem Header="Open vendor download page" Click="OpenVendorPage_Click"/>
+                                <MenuItem Header="Copy vendor download link" Click="CopyVendorLink_Click"/>
+                                <MenuItem Header="Copy direct installer link" Click="CopyColumn_Click" Tag="InstallerUrl"/>
+                                <Separator/>
                                 <MenuItem Header="Uninstall this app..." Click="UninstallSelectedUpdates_Click"/>
                                 <MenuItem Header="Remove from manual updates list" Click="ClearManual_Click"/>
                             </ContextMenu>
@@ -203,6 +207,15 @@
                             <DataGridTextColumn Header="Package ID" Binding="{Binding Id}" IsReadOnly="True" Width="2*"/>
                             <DataGridTextColumn Header="Installed" Binding="{Binding Installed}" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Available" Binding="{Binding Available}" IsReadOnly="True" Width="*"/>
+                            <DataGridTemplateColumn Header="Vendor" Width="110">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock VerticalAlignment="Center" Visibility="{Binding LinkVisibility}">
+                                            <Hyperlink Click="VendorLink_Click" Tag="{Binding}" ToolTip="{Binding VendorUrl}">Download page</Hyperlink>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="1.4*"/>
                         </DataGrid.Columns>
                     </DataGrid>
@@ -235,6 +248,7 @@
                                 <MenuItem Header="Copy version" Click="CopyColumn_Click" Tag="Version"/>
                                 <MenuItem Header="Copy publisher" Click="CopyColumn_Click" Tag="Publisher"/>
                                 <MenuItem Header="Copy uninstall command" Click="CopyColumn_Click" Tag="UninstallCommand"/>
+                                <MenuItem Header="Open vendor website" Click="OpenVendorPage_Click"/>
                                 <Separator/>
                                 <MenuItem Header="Uninstall selected..." Click="UninstallSelectedApps_Click"/>
                             </ContextMenu>
@@ -278,6 +292,8 @@
                                     <MenuItem Header="Copy application name" Click="CopyColumn_Click" Tag="Name"/>
                                     <MenuItem Header="Copy package ID" Click="CopyColumn_Click" Tag="Id"/>
                                     <MenuItem Header="Copy last error" Click="CopyColumn_Click" Tag="LastError"/>
+                                    <MenuItem Header="Copy vendor download link" Click="CopyColumn_Click" Tag="VendorUrl"/>
+                                    <MenuItem Header="Copy direct installer link" Click="CopyColumn_Click" Tag="InstallerUrl"/>
                                     <Separator/>
                                     <MenuItem Header="Remove from manual updates list" Click="ClearManual_Click"/>
                                 </ContextMenu>
@@ -288,6 +304,15 @@
                                 <DataGridTextColumn Header="Installed" Binding="{Binding InstalledVersion}" Width="*"/>
                                 <DataGridTextColumn Header="Available" Binding="{Binding AvailableVersion}" Width="*"/>
                                 <DataGridTextColumn Header="Failures" Binding="{Binding Failures}" Width="60"/>
+                                <DataGridTemplateColumn Header="Vendor" Width="110">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock VerticalAlignment="Center">
+                                                <Hyperlink Click="VendorLink_Click" Tag="{Binding}" ToolTip="{Binding VendorUrl}">Download page</Hyperlink>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Last error" Binding="{Binding LastError}" Width="3*"/>
                             </DataGrid.Columns>
                         </DataGrid>

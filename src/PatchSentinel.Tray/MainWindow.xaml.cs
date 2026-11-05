@@ -45,6 +45,7 @@ public sealed class AppRow : INotifyPropertyChanged
     public string Arch => Item.Architecture ?? "";
     public string UninstallMethod { get; init; } = "";
     public string UninstallCommand => Item.QuietUninstallString ?? Item.UninstallString ?? "";
+    public string? VendorUrl => Item.VendorUrl;
     public bool CanUninstall { get; init; }
 
     public bool Selected
@@ -87,6 +88,10 @@ public sealed class UpdateRow : INotifyPropertyChanged
     public string Installed => Candidate.InstalledVersion;
     public string Available => Candidate.AvailableVersion;
     public bool PolicyLocked => Candidate.ExcludedByPolicy;
+    public string? VendorUrl => Candidate.VendorUrl;
+    public string? InstallerUrl => Candidate.InstallerUrl;
+    /// <summary>The Download page link is shown for apps that need a manual update.</summary>
+    public Visibility LinkVisibility => Candidate.NeedsManualUpdate || Candidate.VendorUrl is not null ? Visibility.Visible : Visibility.Collapsed;
     public string Note { get; set; } = "";
 
     public bool Excluded
@@ -403,7 +408,7 @@ public partial class MainWindow : Window
         ManualBanner.Visibility = manual.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ManualBannerText.Text = manual.Count == 0 ? "" :
             $"{manual.Count} app(s) need updating by hand because automatic updates keep failing: {string.Join(", ", manual.Select(m => m.Name))}. " +
-            "Scheduled runs skip them; tick Update to retry, or see the History tab for the error.";
+            "Use the Download page link to get the vendor's installer, or tick Update to retry. Scheduled runs skip them until they are up to date.";
         UpdatesTab.Header = _scan.Counts.UpdatesAvailable > 0 ? $"App updates ({_scan.Counts.UpdatesAvailable})" : "App updates";
         UpdatesIntro.Text = _scan.WingetAvailable
             ? "Updates found by winget. Tick Exclude for apps that must not be updated automatically, then Save exclusions."
@@ -710,6 +715,73 @@ public partial class MainWindow : Window
     }
 
     private void ShowWindowsManaged_Click(object sender, RoutedEventArgs e) => RenderScan();
+
+    // ---------------- vendor links ----------------
+
+    private void VendorLink_Click(object sender, RoutedEventArgs e)
+    {
+        var tag = (sender as FrameworkContentElement)?.Tag;
+        _ = OpenVendorPageAsync(tag);
+    }
+
+    private void OpenVendorPage_Click(object sender, RoutedEventArgs e)
+    {
+        var grid = GridFor(sender);
+        if (grid?.SelectedItem is { } item) _ = OpenVendorPageAsync(item);
+        else MessageBox.Show(this, "Select an app first.", "Vendor download page");
+    }
+
+    private async void CopyVendorLink_Click(object sender, RoutedEventArgs e)
+    {
+        var grid = GridFor(sender);
+        if (grid?.SelectedItem is not { } item) return;
+        var url = await ResolveVendorUrlAsync(item);
+        if (url is null) { StatusBarText.Text = "No vendor link is listed for this app."; return; }
+        SetClipboard(url);
+        StatusBarText.Text = $"Copied {url}";
+    }
+
+    /// <summary>Uses the stored link, otherwise asks winget for the package's homepage, otherwise searches the web.</summary>
+    private async Task OpenVendorPageAsync(object? item)
+    {
+        var url = await ResolveVendorUrlAsync(item);
+        if (url is null)
+        {
+            var name = item switch { UpdateRow u => u.Name, ManualUpdateEntry m => m.Name, AppRow a => a.Name, _ => null };
+            if (name is null) return;
+            url = "https://www.bing.com/search?q=" + Uri.EscapeDataString($"{name} download");
+            StatusBarText.Text = "No vendor page is listed for this app, so a web search was opened instead.";
+        }
+        OpenUrl(url);
+    }
+
+    private async Task<string?> ResolveVendorUrlAsync(object? item)
+    {
+        var (url, id) = item switch
+        {
+            UpdateRow u => (u.VendorUrl, u.Id),
+            ManualUpdateEntry m => (m.VendorUrl, m.Id),
+            AppRow a => (a.VendorUrl, (string?)null),
+            _ => ((string?)null, (string?)null),
+        };
+        if (url is not null || id is null) return url;
+        var winget = WingetClient.TryCreate(isSystem: false);
+        if (winget is null) return null;
+        StatusBarText.Text = "Looking up the vendor page...";
+        try { return (await winget.ShowLinksAsync(id, CancellationToken.None))?.VendorPage; }
+        catch { return null; }
+    }
+
+    private void OpenUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || (u.Scheme != Uri.UriSchemeHttps && u.Scheme != Uri.UriSchemeHttp))
+        {
+            MessageBox.Show(this, "That link is not a web address.", "Vendor download page");
+            return;
+        }
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Could not open the browser"); }
+    }
 
     // ---------------- findings ----------------
 

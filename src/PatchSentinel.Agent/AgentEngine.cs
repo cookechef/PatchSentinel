@@ -18,6 +18,8 @@ internal sealed class AgentState
     public DateTimeOffset? LastSelfUpdateCheckAt { get; set; }
     public string? AvailableVersion { get; set; }
     public DateTimeOffset? AvailableSince { get; set; }
+    /// <summary>Agent version that last ran; a change means PatchSentinel was installed or upgraded.</summary>
+    public string? LastRunVersion { get; set; }
     public string? LastSelfUpdateAttemptVersion { get; set; }
     public DateTimeOffset? LastSelfUpdateAttemptAt { get; set; }
     public DateTimeOffset? DeferredUntil { get; set; }
@@ -58,6 +60,30 @@ internal sealed class AgentEngine
 
         var pipe = new PipeServer(HandleAsync);
         var pipeTask = pipe.RunAsync(ct);
+
+        // After an install or upgrade, reopen the tray app for signed-in users (a silent MSI closes it).
+        if (_state.LastRunVersion != AppPaths.Version)
+        {
+            var previous = _state.LastRunVersion;
+            _state.LastRunVersion = AppPaths.Version;
+            if (previous is not null)
+            {
+                _state.AvailableVersion = null;
+                _state.AvailableSince = null;
+                _tracker.RecordEvent(new HistoryEntry { At = DateTimeOffset.Now, Kind = "Self-update", Name = "PatchSentinel", From = previous, To = AppPaths.Version, Success = true, Message = $"Now running {AppPaths.Version}", Trigger = "Installer" });
+            }
+            SaveState();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(20), ct); // let the installer finish
+                    SessionLauncher.StartTrayInActiveSessions();
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { AppLog.Warn($"Could not reopen the tray app: {ex.Message}"); }
+            }, ct);
+        }
 
         while (!ct.IsCancellationRequested)
         {
@@ -277,6 +303,7 @@ internal sealed class AgentEngine
         var result = await Scanner.ScanAsync(_settings, new ScanOptions(), ct);
         if (result.WingetAvailable && !result.Warnings.Any(w => w.StartsWith("winget update check failed", StringComparison.Ordinal)))
             _tracker.Reconcile(result.Updates);
+        await FillVendorLinksAsync(ct);
         result.Updates = _tracker.Annotate(result.Updates);
         lock (_gate) _lastScan = result;
         _state.LastScanAt = result.ScannedAt;
@@ -351,6 +378,7 @@ internal sealed class AgentEngine
         foreach (var name in newlyManual)
             details.Add($"MANUAL {name}: failed {UpdateTracker.FailuresBeforeManual} times, so it has been added to the manual updates list and will be skipped by scheduled runs.");
 
+        if (newlyManual.Count > 0) await FillVendorLinksAsync(ct);
         lock (_gate) if (_lastScan is not null) _lastScan.Updates = _tracker.Annotate(_lastScan.Updates);
 
         return new JobInfo
@@ -361,6 +389,24 @@ internal sealed class AgentEngine
                   + (newlyManual.Count > 0 ? $"; {string.Join(", ", newlyManual)} now need a manual update" : "") + ".",
             Details = details,
         };
+    }
+
+    /// <summary>Looks up vendor download pages for apps on the manual updates list (from their winget manifests).</summary>
+    private async Task FillVendorLinksAsync(CancellationToken ct)
+    {
+        var ids = _tracker.NeedingLinks();
+        if (ids.Count == 0) return;
+        var winget = WingetClient.TryCreate(Platform.IsSystem);
+        if (winget is null) return;
+        foreach (var id in ids.Take(10))
+        {
+            try
+            {
+                var links = await winget.ShowLinksAsync(id, ct);
+                _tracker.SetLinks(id, links?.VendorPage, links?.InstallerUrl);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { AppLog.Warn($"Could not read vendor links for {id}: {ex.Message}"); }
+        }
     }
 
     private async Task<JobInfo> RemediateAsync(Finding finding, RemediationAction action, string caller, CancellationToken ct)

@@ -55,7 +55,8 @@ public static class InventoryExporter
     // ---------------- HTML ----------------
 
     public static string ToHtml(IEnumerable<InstalledItem> items, string computer,
-        Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null)
+        Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null,
+        IReadOnlyCollection<Browsers.BrowserExtension>? extensions = null)
     {
         static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
         var list = Ordered(items).ToList();
@@ -92,6 +93,8 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
             sb.Append("</table>");
         }
 
+        if (extensions is { Count: > 0 }) sb.Append(ExtensionExporter.HtmlSection(extensions));
+
         sb.Append("<h2>All installed apps</h2><input id=\"q\" placeholder=\"Filter by name, publisher or category...\" oninput=\"f()\">");
         sb.Append("<table id=\"t\"><tr><th>Application</th><th>Version</th><th>Publisher</th><th>Installed</th><th>Size (MB)</th><th>For</th><th>Category</th><th>Purpose / advisory</th></tr>");
         foreach (var i in list)
@@ -114,7 +117,8 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
     // ---------------- Excel (.xlsx) ----------------
 
     public static void WriteXlsx(IEnumerable<InstalledItem> items, string computer, Stream output,
-        Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null)
+        Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null,
+        IReadOnlyCollection<Browsers.BrowserExtension>? extensions = null)
     {
         var widths = new[] { 16, 42, 16, 26, 12, 10, 12, 8, 30, 16, 40, 60, 40, 10, 40, 50, 50, 60 };
         var apps = new XSheet { Name = "Installed apps", Columns = Headers.Select((h, i) => (h, widths[i])).ToList() };
@@ -137,6 +141,7 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
         if (device is not null) sheets.Add(DeviceReport.DeviceSheet(device));
         if (checks is { Count: > 0 }) sheets.Add(DeviceReport.ChecklistSheet(checks));
         sheets.Add(apps);
+        if (extensions is { Count: > 0 }) sheets.Add(ExtensionExporter.Sheet(extensions, computer));
         WorkbookWriter.Write(output, sheets, $"PatchSentinel - {computer}");
     }
 }

@@ -41,7 +41,8 @@
                             </Border>
                         </UniformGrid>
                         <TextBlock x:Name="ScheduleSummaryText" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                        <TextBlock x:Name="DeviceSummaryText" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                        <TextBlock x:Name="DeviceSummaryText" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="ExtSummaryText" TextWrapping="Wrap" Margin="0,0,0,14"/>
                         <WrapPanel>
                             <Button x:Name="ScanButton" Content="Scan now" Click="ScanNow_Click" Style="{DynamicResource Primary}"/>
                             <Button x:Name="UpdateAllButton" Content="Install app updates now" Click="UpdateAll_Click"/>
@@ -386,6 +387,108 @@
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
                                         <Setter Property="ToolTip" Value="{Binding Advisory}"/>
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Browser extensions" x:Name="ExtensionsTab">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Extensions in Google Chrome, Microsoft Edge, Brave and Firefox for every user on this PC, checked against the Chrome Web Store, Edge Add-ons and addons.mozilla.org. The browsers do not warn when an extension is retired, pulled from the store or stops updating, so PatchSentinel does."/>
+                    <Border DockPanel.Dock="Top" x:Name="ExtBanner" Background="{DynamicResource BannerBg}" BorderBrush="{DynamicResource BannerBorder}" BorderThickness="1"
+                            CornerRadius="6" Padding="10,6" Margin="0,0,0,10" Visibility="Collapsed">
+                        <TextBlock x:Name="ExtBannerText" TextWrapping="Wrap" Foreground="{DynamicResource Warning}"/>
+                    </Border>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox x:Name="ExtSearch" Width="220" Padding="3" TextChanged="ExtFilter_Changed"/>
+                        <TextBlock Text="Browser" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                        <ComboBox x:Name="ExtBrowserBox" Width="150" SelectedIndex="0" SelectionChanged="ExtFilter_Changed">
+                            <ComboBoxItem Content="All browsers" Tag=""/>
+                            <ComboBoxItem Content="Google Chrome" Tag="Chrome"/>
+                            <ComboBoxItem Content="Microsoft Edge" Tag="Edge"/>
+                            <ComboBoxItem Content="Firefox" Tag="Firefox"/>
+                            <ComboBoxItem Content="Brave" Tag="Brave"/>
+                        </ComboBox>
+                        <CheckBox x:Name="ExtReviewOnly" Content="Only extensions that need attention" Margin="16,0,0,0" VerticalAlignment="Center" Click="ExtFilter_Changed"/>
+                        <TextBlock x:Name="ExtCountText" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
+                    </StackPanel>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button x:Name="ExtCheckButton" Content="Check extensions now" Click="CheckExtensions_Click" Style="{DynamicResource Primary}"/>
+                        <Button x:Name="ExtBlockButton" Content="Block selected..." Click="BlockExtensions_Click"/>
+                        <Button Content="Open store page" Click="OpenExtensionStore_Click"/>
+                        <Button Content="Export list (Excel, HTML or CSV)..." Click="ExportExtensions_Click"/>
+                        <TextBlock x:Name="ExtResultText" VerticalAlignment="Center" Margin="8,0,0,8" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"/>
+                    </WrapPanel>
+                    <DataGrid x:Name="ExtGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" ClipboardCopyMode="IncludeHeader" IsReadOnly="True"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource GridLine}"
+                              Background="{DynamicResource SurfaceBg}" BorderBrush="{DynamicResource SurfaceBorder}" RowHeaderWidth="0"
+                              MouseDoubleClick="ExtGrid_MouseDoubleClick">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                <MenuItem Header="Copy extension name" Click="CopyColumn_Click" Tag="Name"/>
+                                <MenuItem Header="Copy extension ID" Click="CopyColumn_Click" Tag="Id"/>
+                                <MenuItem Header="Copy advice" Click="CopyColumn_Click" Tag="AdviceText"/>
+                                <MenuItem Header="Open store page" Click="OpenExtensionStore_Click"/>
+                                <MenuItem Header="Open profile folder" Click="OpenExtensionProfile_Click"/>
+                                <Separator/>
+                                <MenuItem Header="Block selected..." Click="BlockExtensions_Click"/>
+                                <MenuItem Header="Unblock selected" Click="UnblockExtensions_Click"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Status" Width="1.5*" SortMemberPath="ConcernRank" ClipboardContentBinding="{Binding Status}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="Pill" CornerRadius="9" Padding="8,1" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#D1E9FF" ToolTip="{Binding Advice}">
+                                            <TextBlock x:Name="PillText" Text="{Binding Status}" FontSize="12" Foreground="#175CD3" TextTrimming="CharacterEllipsis"/>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Concern}" Value="High">
+                                                <Setter TargetName="Pill" Property="Background" Value="#B42318"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="White"/>
+                                                <Setter TargetName="PillText" Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Concern}" Value="Review">
+                                                <Setter TargetName="Pill" Property="Background" Value="#F79009"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="White"/>
+                                                <Setter TargetName="PillText" Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsUpToDate}" Value="True">
+                                                <Setter TargetName="Pill" Property="Background" Value="#D1FADF"/>
+                                                <Setter TargetName="PillText" Property="Foreground" Value="#067647"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Extension" Binding="{Binding Name}" Width="2.2*"/>
+                            <DataGridTextColumn Header="Browser" Binding="{Binding Browser}" Width="1.1*"/>
+                            <DataGridTextColumn Header="User / profile" Binding="{Binding Owner}" Width="1.3*"/>
+                            <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="0.8*"/>
+                            <DataGridTextColumn Header="Latest" Binding="{Binding Latest}" Width="0.8*"/>
+                            <DataGridTextColumn Header="On" Binding="{Binding EnabledText}" Width="40"/>
+                            <DataGridTextColumn Header="Installed from" Binding="{Binding Source}" Width="1.1*"/>
+                            <DataGridTextColumn Header="Access" Binding="{Binding Access}" Width="1.3*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        <Setter Property="ToolTip" Value="{Binding Access}"/>
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Advice" Binding="{Binding Advice}" Width="3*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        <Setter Property="ToolTip" Value="{Binding Advice}"/>
                                         <Setter Property="VerticalAlignment" Value="Center"/>
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>

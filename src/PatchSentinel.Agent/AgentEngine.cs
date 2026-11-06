@@ -300,6 +300,24 @@ internal sealed class AgentEngine
         return id;
     }
 
+    private async Task<PipeResponse> ScanExtensionsForPipeAsync()
+    {
+        var warnings = new List<string>();
+        var s = _settings.Settings;
+        if (!s.ScanBrowserExtensions) return PipeResponse.Fail("Browser extension checks are turned off by your administrator.");
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
+        cts.CancelAfter(TimeSpan.FromMinutes(2));
+        var list = await Scanner.ScanExtensionsAsync(s.ExtensionStoreLookup, Platform.IsSystem, warnings, cts.Token);
+        lock (_gate)
+            if (_lastScan is not null)
+            {
+                _lastScan.Extensions = list;
+                FileUtil.WriteAllTextAtomic(AppPaths.LastScanFile, JsonSerializer.Serialize(_lastScan, Json.Options));
+            }
+        foreach (var w in warnings) AppLog.Warn(w);
+        return PipeResponse.Success(new ExtensionScanView(list, warnings));
+    }
+
     private async Task<JobInfo> ScanAsync(CancellationToken ct)
     {
         var result = await Scanner.ScanAsync(_settings, new ScanOptions(), ct);
@@ -315,7 +333,7 @@ internal sealed class AgentEngine
         return new JobInfo
         {
             Success = true,
-            Message = $"{c.EndOfLife} end-of-life, {c.NearingEndOfLife} nearing end of life, {c.OutdatedPatch} unpatched, {c.UpdatesAvailable} app update(s).",
+            Message = $"{c.EndOfLife} end-of-life, {c.NearingEndOfLife} nearing end of life, {c.OutdatedPatch} unpatched, {c.UpdatesAvailable} app update(s), {c.ExtensionsToReview} browser extension(s) to review.",
             Details = result.Warnings,
         };
     }
@@ -520,6 +538,35 @@ internal sealed class AgentEngine
                             Success = r.Success, Message = Trunc(r.Message, 500), Trigger = caller.Name,
                         });
                     return Task.FromResult(PipeResponse.Success());
+                }
+
+                case Commands.ScanExtensions:
+                    return ScanExtensionsForPipeAsync();
+
+                case Commands.BlockExtension:
+                {
+                    var r = Payload<BlockExtensionRequest>(req);
+                    if (r is null || string.IsNullOrWhiteSpace(r.Id)) return Task.FromResult(PipeResponse.Fail("Missing extension."));
+                    if (!_settings.Settings.AllowUserRemediation && !caller.IsAdmin)
+                        return Task.FromResult(PipeResponse.Fail("Your administrator has disabled fixes from this device. Ask IT to remove the extension."));
+                    string msg;
+                    var ok = true;
+                    try { msg = r.Unblock ? Core.Browsers.ExtensionPolicy.Unblock(r.Browser, r.Id) : Core.Browsers.ExtensionPolicy.Block(r.Browser, r.Id); }
+                    catch (Exception ex) { msg = ex.Message; ok = false; }
+                    _tracker.RecordEvent(new HistoryEntry
+                    {
+                        At = DateTimeOffset.Now, Kind = "Extension", Name = Trunc($"{r.Name} ({r.Browser})", 200), Id = Trunc(r.Id, 100),
+                        Success = ok, Message = Trunc(msg, 500), Trigger = caller.Name,
+                    });
+                    if (ok)
+                        lock (_gate)
+                            if (_lastScan is not null)
+                                foreach (var e in _lastScan.Extensions.Where(e => e.Browser == r.Browser && e.Id.Equals(r.Id, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    e.BlockedByPolicy = !r.Unblock;
+                                    if (!r.Unblock) { e.Concern = Core.Rules.Concern.Info; e.Advice = "Blocked by policy: the browser turns it off (Firefox uninstalls it) at the next start and it can't be turned back on. " + e.Advice; }
+                                }
+                    return Task.FromResult(ok ? PipeResponse.Success(msg) : PipeResponse.Fail(msg));
                 }
 
                 case Commands.GetHistory:

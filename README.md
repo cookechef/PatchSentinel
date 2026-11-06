@@ -23,6 +23,7 @@ PatchSentinel covers both jobs. It installs app updates with winget on a schedul
 | **Software purpose and security advisories** | Each installed app is tagged with what it is for (time tracking or employee monitoring, remote access, RMM agent, network scanner, consumer VPN, peer-to-peer, bundled "PC optimiser", keylogger, crypto-miner, security software, password manager, cloud sync and so on) and how much of a concern it is (Info, Review, High), with plain-English advice. For example, memtime and Clockify are flagged as monitoring tools to confirm are approved and disclosed to staff. The categories live in `rules/eol-rules.json` under `categories` and update with the rules. |
 | **Device information** | Device name, make and model, serial number, estimated age (from the processor generation), CPU, RAM, disks and free space, BIOS, TPM, Secure Boot, Windows version and last update, public and private IPs, DNS, domain or Entra join and OU. The Security section covers antivirus, firewall, Defender, BitLocker per drive and enabled local accounts. Shown on the Device tab and included in every export. |
 | **Device build checklist** | Follows the ADM device build sheet and marks each one OK, Check, Action needed or Manual. It flags leftover bundled apps (McAfee, HP Wolf Security), Windows Update age, driver problems, BIOS age, missing Dell Command \| Update, Lenovo Vantage, HP Support Assistant or Intel DSA (and whether they have ever run), Atera and ScreenConnect, the active antivirus (Bitdefender, Microsoft Defender, SentinelOne...), domain or Entra join, BitLocker, the standard apps, Office, enabled setup accounts and static DNS. The steps are in `rules/eol-rules.json` under `buildChecklist`, so they can be edited on GitHub. |
+| **Browser extensions** | A Browser extensions tab lists every Google Chrome, Microsoft Edge, Brave and Firefox extension for every user and profile on the PC, and checks each one against the Chrome Web Store, Edge Add-ons and addons.mozilla.org (only the extension IDs are sent, and results are cached for 24 hours). Browsers don't warn about this, so PatchSentinel flags extensions that have been **removed from the store** (often for malware or because they were abandoned), **retired Manifest V2** extensions in Chrome and Edge, extensions **blocked by Mozilla**, ones that are **out of date**, and ones **sideloaded or loaded in developer mode**. It also shows which can read every website or reach cookies, history or network traffic. Select extensions and click **Block selected** to add them to the browser's blocklist policy: Chrome, Edge and Brave switch them off for good and Firefox uninstalls them. The list can be exported to Excel, HTML or CSV, and it is included in the scan report and the device and apps workbooks. |
 | **History** | Every update, fix and self-update is recorded with versions, result, error and who started it. It can be copied or exported to CSV as patching evidence. |
 | **Exclusions** | Users can tick apps to exclude (wildcards such as `Adobe.*` are supported). Admins can enforce exclusions by policy, which users cannot override. |
 | **EOL / legacy detection** | Reads `dotnet\shared\*` and `dotnet\sdk\*` folders (x64, x86 and arm64) as well as Add/Remove Programs for all users. EOL dates and latest patch versions come from [endoflife.date](https://endoflife.date), with built-in dates as an offline fallback. |
@@ -92,6 +93,10 @@ psentinel updates install --all                  # respects exclusions
 psentinel updates install --id 7zip.7zip --id Notepad++.Notepad++
 psentinel device                                 # device details, security and build checklist
 psentinel device --xlsx C:\Reports\%COMPUTERNAME%.xlsx --html C:\Reports\%COMPUTERNAME%.html
+psentinel extensions --review                    # browser extensions that are retired, removed, out of date or sideloaded
+psentinel extensions --xlsx C:\Reports\extensions.xlsx --html C:\Reports\extensions.html
+psentinel extensions block --browser chrome --id abcdefghijklmnopabcdefghijklmnop
+psentinel extensions block --browser firefox --id "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}"
 psentinel inventory --review                     # apps that need a security review
 psentinel inventory --xlsx C:\Reports\apps.xlsx --html C:\Reports\apps.html
 psentinel uninstall --name "DrayTek Smart VPN Client" --yes
@@ -141,6 +146,8 @@ Create values under `HKLM\SOFTWARE\Policies\PatchSentinel`. Any `Schedule*` valu
 | `UseEndOfLifeApi` | DWORD | `0` | Use built-in dates only |
 | `CollectDeviceInfo` | DWORD | `0` | Do not collect device details or run the build checklist |
 | `PublicIpLookup` | DWORD | `0` | Do not look up the public IP (otherwise one HTTPS call to api.ipify.org per scan) |
+| `ScanBrowserExtensions` | DWORD | `0` | Do not check browser extensions |
+| `ExtensionStoreLookup` | DWORD | `0` | Check extensions offline only (no calls to the Chrome Web Store, Edge Add-ons or addons.mozilla.org); retired, blocklisted and sideloaded extensions are still flagged |
 | `AutoUpdateRules` | DWORD | `1` | Fetch the rules catalogue daily |
 | `SelfUpdateMode` | String | `NotifyOnly` | `Automatic` (default), `NotifyOnly` or `Off` |
 | `SelfUpdateGraceMinutes` | DWORD | `15` | Delay between the notification and an automatic install |
@@ -198,6 +205,7 @@ The MSI is built with WiX Toolset v5 (pinned to `5.0.2`).
 - Uninstallers in user-writable locations, and all per-user (HKCU) uninstallers, are **never** run as SYSTEM. They run in the user's own session instead.
 - `C:\ProgramData\PatchSentinel` is re-owned and locked to SYSTEM/Administrators at start-up, so a user cannot pre-create it to plant rules or settings.
 - Remediation stops at the first failed step. Old .NET patch folders are only deleted after a newer patch has been confirmed on disk.
+- Blocking a browser extension only writes the browsers' own blocklist policies (`ExtensionInstallBlocklist` for Chrome, Edge and Brave, `ExtensionSettings` for Firefox) under `HKLM\SOFTWARE\Policies`. It obeys `AllowUserRemediation` and is recorded in the history.
 - Every action is logged to `C:\ProgramData\PatchSentinel\logs`, including which user requested it.
 
 ## Limitations and roadmap
@@ -206,6 +214,7 @@ The MSI is built with WiX Toolset v5 (pinned to `5.0.2`).
 - winget sometimes truncates long package ids in its output. Those apps are shown as "update manually" rather than guessed at.
 - The dependency check looks in Program Files and per-user Programs folders. Services or apps installed elsewhere can be added with `ExtraDependencyScanPaths` in `settings.json`.
 - Per-user apps for users who are not signed in are only seen once they sign in.
+- Browser extensions are read from each user's profile folders, so extensions from roaming or synced profiles appear once the browser has downloaded them on this PC. Extensions installed by policy from a private source can't be checked against a public store and show as "Not checked".
 - Possible next steps: central reporting to a dashboard or Halo PSA, ARM64 build, Windows Update/driver status, more rules (Java 8 update levels, SQL Server Native Client, IIS modules).
 
 ## Building from source

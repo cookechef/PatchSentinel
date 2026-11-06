@@ -22,6 +22,9 @@ public static class ReportWriter
         foreach (var u in r.Updates)
             sb.AppendLine(string.Join(',', Csv(r.ComputerName), "Update", "", Csv(u.Name), Csv(u.Excluded ? "Excluded" : "Update available"), "",
                 Csv(u.AvailableVersion), Csv($"{u.Id} {u.InstalledVersion}"), "", ""));
+        foreach (var e in r.Extensions.Where(e => e.Concern != Rules.Concern.Info))
+            sb.AppendLine(string.Join(',', Csv(r.ComputerName), "Browser extension", Csv(e.Concern.ToString()), Csv($"{e.Name} ({e.BrowserName}, {e.UserName}/{e.Profile})"),
+                Csv(e.StatusText), "", Csv(e.LatestVersion ?? ""), Csv($"{e.Id} {e.Version}"), "", Csv(e.Advice)));
         return sb.ToString();
     }
 
@@ -49,7 +52,7 @@ main{max-width:1100px;margin:0 auto;padding:32px 24px}h1{font-size:24px;margin:0
 table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#f2f4f7;font-weight:600}
 .sev{font-weight:600;white-space:nowrap}.Critical{color:var(--crit)}.High{color:var(--high)}.Medium{color:var(--med)}.Low,.Info{color:var(--muted)}
-ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.small{font-size:12px}
+ul{margin:4px 0;padding-left:18px}.badge{font-weight:600;white-space:nowrap}.Review{color:var(--med)}.adv{max-width:420px}a{color:#175cd3}.break{color:var(--crit);font-weight:600}.small{font-size:12px}
 @media print{body{background:#fff}.card,table{break-inside:avoid} }
 {{DeviceReport.Css}}
 </style></head><body><main>
@@ -61,6 +64,7 @@ ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.smal
 <div class="card"><b class="High">{{c.OutdatedPatch}}</b>Missing security patches</div>
 <div class="card"><b>{{c.UpdatesAvailable}}</b>App updates available</div>
 </div>
+{{(c.ExtensionsToReview > 0 ? $"<p class=\"Medium\" style=\"margin-top:14px\"><b>{c.ExtensionsToReview}</b> browser extension(s) are retired, removed from the store, out of date or need a review - see below.</p>" : "")}}
 {{(c.SoftwareToReview > 0 ? $"<p class=\"Medium\" style=\"margin-top:14px\"><b>{c.SoftwareToReview}</b> installed app(s) need a security review (monitoring, remote access or similar) - see below.</p>" : "")}}
 """);
 
@@ -105,6 +109,8 @@ ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.smal
                           $"<td><b>{E(i.Name)}</b> {E(i.Version)}<div class=\"small muted\">{E(i.Publisher)}</div></td><td>{E(i.Classification.Category)}</td><td class=\"small\">{E(i.Classification.Advisory)}</td></tr>");
             sb.Append("</table>");
         }
+
+        sb.Append(ExtensionExporter.HtmlSection(r.Extensions));
 
         sb.Append("<h2>Application updates (winget)</h2>");
         if (!r.WingetAvailable) sb.Append("<p class=\"muted\">winget was not available on this device.</p>");

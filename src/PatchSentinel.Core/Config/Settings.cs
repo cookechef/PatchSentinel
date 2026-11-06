@@ -108,6 +108,10 @@ public sealed class AgentSettings
     public bool CollectDeviceInfo { get; set; } = true;
     /// <summary>Look up the public IP address (one HTTPS request to api.ipify.org).</summary>
     public bool PublicIpLookup { get; set; } = true;
+    /// <summary>Check installed Chrome, Edge, Brave and Firefox extensions.</summary>
+    public bool ScanBrowserExtensions { get; set; } = true;
+    /// <summary>Ask the Chrome Web Store, Edge Add-ons and addons.mozilla.org for the latest version of each extension (sends only extension IDs).</summary>
+    public bool ExtensionStoreLookup { get; set; } = true;
     public int DependencyScanBudgetSeconds { get; set; } = 90;
 }
 
@@ -168,6 +172,8 @@ public static class PolicyReader
             if (Bool(k, "AutoUpdateAgent") is { } aua) s.AutoUpdateAgent = aua;
             if (Bool(k, "CollectDeviceInfo") is { } cdi) s.CollectDeviceInfo = cdi;
             if (Bool(k, "PublicIpLookup") is { } pil) s.PublicIpLookup = pil;
+            if (Bool(k, "ScanBrowserExtensions") is { } sbe) s.ScanBrowserExtensions = sbe;
+            if (Bool(k, "ExtensionStoreLookup") is { } esl) s.ExtensionStoreLookup = esl;
             if (k.GetValue("SelfUpdateMode") is string sum && Enum.TryParse<SelfUpdateMode>(sum, true, out var mode)) s.SelfUpdateMode = mode;
             if (Int(k, "SelfUpdateGraceMinutes") is { } sgm) s.SelfUpdateGraceMinutes = Math.Clamp(sgm, 0, 7 * 24 * 60);
             if (k.GetValue("UpdateRepo") is string repo && repo.Contains('/')) s.UpdateRepo = repo.Trim();

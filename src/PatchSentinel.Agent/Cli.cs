@@ -36,6 +36,7 @@ internal static class Cli
                 "uninstall" => await UninstallAsync(args, cts.Token),
                 "inventory" => await InventoryAsync(args, cts.Token),
                 "device" => await DeviceAsync(args, cts.Token),
+                "extensions" => await ExtensionsAsync(args, cts.Token),
                 "rules" => await RulesAsync(args, cts.Token),
                 "self-update" => await SelfUpdateAsync(args, cts.Token),
                 "run" => await RunConsoleAsync(cts.Token),
@@ -64,6 +65,7 @@ internal static class Cli
             --offline                  Do not contact endoflife.date (use built-in/cached dates)
             --inventory                Include the full software inventory in JSON output
             --no-device                Skip device details and the build checklist
+            --no-extensions            Skip the browser extension check
 
           updates list                 List available winget upgrades (exclusions applied)
           updates install --all        Install every non-excluded upgrade
@@ -81,6 +83,14 @@ internal static class Cli
           device                       Device details, security status and the build checklist
             --json | --html <file> | --xlsx <file> | --csv <file>
             --no-public-ip             Do not look up the public IP address
+
+          extensions                   Check Chrome, Edge, Brave and Firefox extensions (all users when elevated)
+            --json | --xlsx <file> | --html <file> | --csv <file>
+            --review                   Only show extensions that need attention
+            --offline                  Do not contact the extension stores
+          extensions block --browser <chrome|edge|brave|firefox> --id <extensionId>
+                                       Block an extension by machine policy (applied at the browser's next start)
+          extensions unblock --browser <...> --id <extensionId>
 
           inventory                    List installed apps with category and security advisory
             --xlsx <file> --html <file> --csv <file>   Export the list
@@ -111,6 +121,7 @@ internal static class Cli
             AllowNetwork = !Has(args, "--offline"),
             ScanDependencies = !Has(args, "--no-deps"),
             CollectDevice = includeUpdates && !Has(args, "--no-device"),
+            CheckExtensions = includeUpdates && !Has(args, "--no-extensions"),
         }, ct);
     }
 
@@ -377,6 +388,45 @@ internal static class Cli
         }
         var failed = checks.Count(c => c.Status == Core.Device.CheckStatus.Fail);
         return failed > 0 ? ExitNeedsAttention : ExitClean;
+    }
+
+    private static async Task<int> ExtensionsAsync(string[] args, CancellationToken ct)
+    {
+        var sub = args.Length > 1 && !args[1].StartsWith("--", StringComparison.Ordinal) ? args[1].ToLowerInvariant() : "list";
+        if (sub is "block" or "unblock")
+        {
+            if (!Platform.IsElevated) { Console.Error.WriteLine("Run elevated: blocking an extension writes a machine policy."); return ExitError; }
+            if (!Enum.TryParse<Core.Browsers.Browser>(Value(args, "--browser"), true, out var browser)) return Usage("--browser must be chrome, edge, brave or firefox.");
+            var ids = Values(args, "--id");
+            if (ids.Count == 0) return Usage("--id is required.");
+            var failed = false;
+            foreach (var id in ids)
+            {
+                try { Console.WriteLine(sub == "block" ? Core.Browsers.ExtensionPolicy.Block(browser, id) : Core.Browsers.ExtensionPolicy.Unblock(browser, id)); }
+                catch (Exception ex) { Console.Error.WriteLine($"{id}: {ex.Message}"); failed = true; }
+            }
+            return failed ? ExitError : ExitClean;
+        }
+        if (sub != "list") return Usage($"Unknown extensions command '{sub}'.");
+
+        var warnings = new List<string>();
+        var s = SettingsStore.LoadEffective(AppPaths.SettingsFile).Settings;
+        var list = await Scanner.ScanExtensionsAsync(s.ExtensionStoreLookup && !Has(args, "--offline"), Platform.IsSystem, warnings, ct);
+        var computer = Environment.MachineName;
+        if (Value(args, "--xlsx") is { } xlsx) { await using var f = File.Create(xlsx); Core.Reporting.ExtensionExporter.WriteXlsx(list, computer, f); }
+        if (Value(args, "--html") is { } html) await File.WriteAllTextAsync(html, Core.Reporting.ExtensionExporter.ToHtml(list, computer), ct);
+        if (Value(args, "--csv") is { } csv) await File.WriteAllTextAsync(csv, Core.Reporting.ExtensionExporter.ToCsv(list, computer), ct);
+        var review = list.Count(e => e.Concern != Core.Rules.Concern.Info);
+        if (Has(args, "--json"))
+            Console.WriteLine(JsonSerializer.Serialize(new { extensions = list, warnings }, Json.Options));
+        else
+        {
+            foreach (var e in Has(args, "--review") ? list.Where(e => e.Concern != Core.Rules.Concern.Info) : list)
+                Console.WriteLine($"[{InventoryExporter.ConcernText(e.Concern),-18}] {e.BrowserName,-15} {e.UserName}/{e.Profile}: {e.Name} {e.Version} - {e.StatusText}");
+            foreach (var w in warnings) Console.WriteLine($"note: {w}");
+            Console.WriteLine($"{list.Count} extensions, {review} need attention.");
+        }
+        return review > 0 ? ExitNeedsAttention : ExitClean;
     }
 
     private static async Task<int> InventoryAsync(string[] args, CancellationToken ct)

@@ -24,6 +24,7 @@ public sealed class TrayController : IDisposable
     private DateTimeOffset? _remindedFor;
     private string? _lastAnnouncedJob;
     private (int Count, DateTime At) _lastEolAlert = (-1, DateTime.MinValue);
+    private (int Count, DateTime At) _lastExtAlert = (-1, DateTime.MinValue);
     private bool _polling;
     private int _lastManualAlert;
     private string? _notifiedVersion;
@@ -183,6 +184,17 @@ public sealed class TrayController : IDisposable
             Notify("Legacy software needs removing",
                 $"{eol} end-of-life item(s) were found that no longer get security fixes. Click to review and fix.",
                 Forms.ToolTipIcon.Warning, "findings");
+            return;
+        }
+
+        // Browser extensions that should be removed (pulled from the store, blocklisted, unknown origin with wide access).
+        var ext = s.Counts.ExtensionsHigh;
+        if (ext > 0 && s.LastScanAt is not null && (ext != _lastExtAlert.Count || DateTime.Now - _lastExtAlert.At > TimeSpan.FromHours(24)))
+        {
+            _lastExtAlert = (ext, DateTime.Now);
+            Notify("Browser extension needs removing",
+                $"{ext} browser extension(s) have been removed from the store, blocked or come from an unknown source. Click to review.",
+                Forms.ToolTipIcon.Warning, "extensions");
             return;
         }
 

@@ -444,3 +444,104 @@ public class AntivirusCheckTests
         Assert.Equal("Active: Microsoft Defender.", r.Detail);
     }
 }
+
+public class BrowserExtensionTests
+{
+    private static readonly string A = new('a', 32), B = new('b', 32), C = new('c', 32);
+
+    [Fact]
+    public void Reads_chromium_profile_with_localised_names_and_preferences()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ps-ud-" + Guid.NewGuid().ToString("N"));
+        var prof = Path.Combine(root, "Default");
+        try
+        {
+            void Ext(string id, string ver, string manifest, string? messages = null)
+            {
+                var d = Path.Combine(prof, "Extensions", id, ver);
+                Directory.CreateDirectory(d);
+                File.WriteAllText(Path.Combine(d, "manifest.json"), manifest);
+                if (messages is null) return;
+                Directory.CreateDirectory(Path.Combine(d, "_locales", "en"));
+                File.WriteAllText(Path.Combine(d, "_locales", "en", "messages.json"), messages);
+            }
+            Ext(A, "1.0.0_0", """{"name":"__MSG_appName__","default_locale":"en","version":"1.0.0","manifest_version":3,"update_url":"https://clients2.google.com/service/update2/crx","host_permissions":["<all_urls>"],"permissions":["cookies"]}""",
+                """{"appName":{"message":"Good Ext"}}""");
+            Ext(A, "0.9.0_0", """{"name":"Old","version":"0.9.0","manifest_version":3}""");
+            Ext(B, "2.0_0", """{"name":"MV2 thing","version":"2.0","manifest_version":2,"permissions":["tabs","http://*/*"]}""");
+            Ext(C, "1.0_0", """{"name":"A theme","version":"1.0","theme":{}}""");
+            File.WriteAllText(Path.Combine(prof, "Secure Preferences"),
+                "{\"extensions\":{\"settings\":{\"" + A + "\":{\"location\":1,\"from_webstore\":true},\"" + B + "\":{\"location\":1,\"disable_reasons\":[1]}}}}");
+
+            var list = Browsers.ExtensionInventory.ReadChromium(Browsers.Browser.Chrome, "tester", root).ToList();
+            Assert.Equal(2, list.Count);
+            var good = list.Single(e => e.Id == A);
+            Assert.Equal("Good Ext", good.Name);
+            Assert.Equal("1.0.0", good.Version);
+            Assert.Equal("Store", good.InstallSource);
+            Assert.True(good.BroadAccess);
+            Assert.Contains("cookies", good.SensitivePermissions);
+            var mv2 = list.Single(e => e.Id == B);
+            Assert.False(mv2.Enabled);
+            Assert.Equal("Sideloaded", mv2.InstallSource);
+            Assert.Equal(2, mv2.ManifestVersion);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void Omaha_response_marks_missing_extensions_as_not_listed()
+    {
+        var xml = "<?xml version=\"1.0\"?><gupdate xmlns=\"http://www.google.com/update2/response\" protocol=\"2.0\">" +
+                  $"<app appid=\"{A}\" status=\"ok\"><updatecheck version=\"1.2.0\" status=\"ok\"/></app>" +
+                  $"<app appid=\"{B}\" status=\"ok\"><updatecheck status=\"noupdate\"/></app>" +
+                  $"<app appid=\"{C}\" status=\"error-unknownApplication\"/></gupdate>";
+        var r = Browsers.ExtensionChecker.ParseOmaha(xml);
+        Assert.True(r[A].Listed);
+        Assert.Equal("1.2.0", r[A].Version);
+        Assert.False(r[B].Listed);
+        Assert.False(r[C].Listed);
+    }
+
+    [Fact]
+    public void Assessment_flags_removed_retired_outdated_and_sideloaded()
+    {
+        Browsers.BrowserExtension Make(string ver = "1.0", int mv = 3, string source = "Store") => new()
+        {
+            Browser = Browsers.Browser.Chrome, Id = A, Name = "X", Version = ver, ManifestVersion = mv, InstallSource = source,
+            UpdateUrl = source == "Store" ? "https://clients2.google.com/service/update2/crx" : null,
+        };
+        var store = Browsers.ExtensionStore.ChromeWebStore;
+
+        var removed = Make();
+        Browsers.ExtensionChecker.Assess(removed, store, new Browsers.StoreInfo { Listed = false });
+        Assert.Equal(Browsers.ExtensionStatus.RemovedFromStore, removed.Status);
+        Assert.Equal(Concern.High, removed.Concern);
+
+        var retired = Make(mv: 2);
+        Browsers.ExtensionChecker.Assess(retired, store, new Browsers.StoreInfo { Listed = true, Version = "1.0" });
+        Assert.Equal(Browsers.ExtensionStatus.RetiredManifestV2, retired.Status);
+
+        var old = Make("1.0");
+        Browsers.ExtensionChecker.Assess(old, store, new Browsers.StoreInfo { Listed = true, Version = "1.4" });
+        Assert.Equal(Browsers.ExtensionStatus.UpdateAvailable, old.Status);
+        Assert.Equal("1.4", old.LatestVersion);
+
+        var ok = Make("1.4");
+        Browsers.ExtensionChecker.Assess(ok, store, new Browsers.StoreInfo { Listed = true, Version = "1.4" });
+        Assert.Equal(Browsers.ExtensionStatus.UpToDate, ok.Status);
+        Assert.Equal(Concern.Info, ok.Concern);
+
+        var side = Make(source: "Sideloaded");
+        side.BroadAccess = true;
+        side.SensitivePermissions = ["cookies"];
+        Browsers.ExtensionChecker.Assess(side, Browsers.ExtensionStore.None, null);
+        Assert.Equal(Browsers.ExtensionStatus.NotFromStore, side.Status);
+        Assert.Equal(Concern.High, side.Concern);
+
+        // Firefox still supports Manifest V2.
+        var ff = new Browsers.BrowserExtension { Browser = Browsers.Browser.Firefox, Id = "a@b", Name = "F", Version = "2.0", ManifestVersion = 2, InstallSource = "Store" };
+        Browsers.ExtensionChecker.Assess(ff, Browsers.ExtensionStore.FirefoxAddons, new Browsers.StoreInfo { Listed = true, Version = "2.0" });
+        Assert.Equal(Browsers.ExtensionStatus.UpToDate, ff.Status);
+    }
+}

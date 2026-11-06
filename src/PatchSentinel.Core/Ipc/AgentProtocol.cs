@@ -45,6 +45,8 @@ public static class Commands
     public const string GetInventory = "get-inventory";
     public const string RecordUninstall = "record-uninstall";
     public const string InstallSelfUpdate = "install-self-update";
+    public const string ScanExtensions = "scan-extensions";
+    public const string BlockExtension = "block-extension";
 }
 
 /// <summary>An app whose automatic update keeps failing and needs updating by hand.</summary>
@@ -86,6 +88,8 @@ public sealed class HistoryView
 }
 
 public sealed record ClearManualRequest(string Id);
+
+public sealed record BlockExtensionRequest(Browsers.Browser Browser, string Id, string Name, bool Unblock = false);
 
 /// <summary>Outcome of an uninstall run by the tray (per-user) or by "psentinel uninstall" (elevated), for history.</summary>
 public sealed record UninstallRecord(string Name, string? Version, bool Success, string Message);
@@ -186,3 +190,5 @@ public sealed class AgentPipeClient
         return r.As<T>();
     }
 }
+
+public sealed record ExtensionScanView(List<Browsers.BrowserExtension> Extensions, List<string> Warnings);

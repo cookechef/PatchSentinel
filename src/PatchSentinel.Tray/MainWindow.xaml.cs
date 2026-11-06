@@ -152,6 +152,26 @@ public sealed class UpdateRow : INotifyPropertyChanged
     private void OnChanged([CallerMemberName] string? p = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
 }
 
+public sealed class ExtRow
+{
+    public Core.Browsers.BrowserExtension Ext { get; init; } = new();
+    public string Status => Ext.StatusText;
+    public string Concern => Ext.Concern.ToString();
+    public bool IsUpToDate => Ext.Status == Core.Browsers.ExtensionStatus.UpToDate && Ext.Concern == Core.Rules.Concern.Info;
+    public int ConcernRank => (int)Ext.Concern * 10 + (Ext.Status == Core.Browsers.ExtensionStatus.UpToDate ? 0 : 1);
+    public string Name => Ext.Name;
+    public string Id => Ext.Id;
+    public string Browser => Ext.BrowserName;
+    public string Owner => $"{Ext.UserName} / {Ext.Profile}";
+    public string Version => Ext.Version ?? "";
+    public string Latest => Ext.LatestVersion ?? "";
+    public string EnabledText => Ext.Enabled ? "Yes" : "Off";
+    public string Source => Ext.InstallSource + (Ext.ManifestVersion is { } mv ? $" (MV{mv})" : "");
+    public string Access => Ext.AccessText;
+    public string Advice => Ext.Advice;
+    public string AdviceText => $"{Ext.Name} ({Ext.BrowserName}, {Ext.Id}): {Ext.StatusText}. {Ext.Advice}";
+}
+
 public partial class MainWindow : Window
 {
     private readonly TrayController _tray;
@@ -194,6 +214,7 @@ public partial class MainWindow : Window
         "history" => HistoryTab,
         "apps" => AppsTab,
         "device" => DeviceTab,
+        "extensions" => ExtensionsTab,
         _ => OverviewTab,
     };
 
@@ -320,6 +341,9 @@ public partial class MainWindow : Window
         DeviceSummaryText.Text = c.BuildChecksFailed + c.BuildChecksWarn == 0 ? ""
             : $"Device build checklist: {c.BuildChecksFailed} need action, {c.BuildChecksWarn} to check - see the Device tab.";
         DeviceSummaryText.Foreground = (System.Windows.Media.Brush)FindResource(c.BuildChecksFailed > 0 ? "Critical" : "Warning");
+        ExtSummaryText.Text = c.ExtensionsToReview == 0 ? ""
+            : $"Browser extensions: {c.ExtensionsToReview} need attention{(c.ExtensionsHigh > 0 ? $" ({c.ExtensionsHigh} should be removed)" : "")} - see the Browser extensions tab.";
+        ExtSummaryText.Foreground = (System.Windows.Media.Brush)FindResource(c.ExtensionsHigh > 0 ? "Critical" : "Warning");
         DeferButton.IsEnabled = st.CanDefer && st.NextUpdateAt is not null && !busy;
 
         StatusBarText.Text = string.Join("  ·  ", new[]
@@ -442,6 +466,7 @@ public partial class MainWindow : Window
             : "winget (App Installer) is not installed on this device, so app updates cannot be checked.";
         WarningsText.Text = _scan.Warnings.Count == 0 ? "" : "Notes: " + string.Join(" ", _scan.Warnings.Take(4));
         RenderDevice();
+        RenderExtensions();
         if (_localMode) StatusBarText.Text = $"Local read-only scan at {_scan.ScannedAt.LocalDateTime:HH:mm} (agent not running)";
     }
 
@@ -626,13 +651,13 @@ public partial class MainWindow : Window
             switch (Path.GetExtension(dlg.FileName).ToLowerInvariant())
             {
                 case ".html":
-                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(apps, device.ComputerName, device, _scan.BuildChecks));
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(apps, device.ComputerName, device, _scan.BuildChecks, _scan.Extensions));
                     break;
                 case ".csv":
                     File.WriteAllText(dlg.FileName, Core.Reporting.DeviceReport.ToCsv(device, _scan.BuildChecks), new System.Text.UTF8Encoding(true));
                     break;
                 default:
-                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(apps, device.ComputerName, f, device, _scan.BuildChecks);
+                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(apps, device.ComputerName, f, device, _scan.BuildChecks, _scan.Extensions);
                     break;
             }
             StatusBarText.Text = $"Device report saved to {dlg.FileName}";
@@ -778,13 +803,13 @@ public partial class MainWindow : Window
             switch (Path.GetExtension(dlg.FileName).ToLowerInvariant())
             {
                 case ".html":
-                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(items, Environment.MachineName, _scan?.Device, _scan?.BuildChecks));
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(items, Environment.MachineName, _scan?.Device, _scan?.BuildChecks, _scan?.Extensions));
                     break;
                 case ".csv":
                     File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToCsv(items, Environment.MachineName, _scan?.Device), new System.Text.UTF8Encoding(true));
                     break;
                 default:
-                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(items, Environment.MachineName, f, _scan?.Device, _scan?.BuildChecks);
+                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(items, Environment.MachineName, f, _scan?.Device, _scan?.BuildChecks, _scan?.Extensions);
                     break;
             }
             StatusBarText.Text = $"Exported {items.Count} apps to {dlg.FileName}";
@@ -816,6 +841,207 @@ public partial class MainWindow : Window
             MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Uninstall results", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Uninstall"); }
+    }
+
+
+    // ---------------- browser extensions ----------------
+
+    private List<ExtRow> _extRows = [];
+
+    private void RenderExtensions()
+    {
+        var all = _scan?.Extensions ?? [];
+        var q = ExtSearch.Text.Trim();
+        var browser = (ExtBrowserBox.SelectedItem as ComboBoxItem)?.Tag as string;
+        var reviewOnly = ExtReviewOnly.IsChecked == true;
+        _extRows = all
+            .Where(e => string.IsNullOrEmpty(browser) || e.Browser.ToString() == browser)
+            .Where(e => !reviewOnly || e.Concern != Core.Rules.Concern.Info)
+            .Where(e => q.Length == 0 || e.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || e.Id.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || e.UserName.Contains(q, StringComparison.OrdinalIgnoreCase) || e.StatusText.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .Select(e => new ExtRow { Ext = e })
+            .OrderByDescending(r => r.ConcernRank).ThenBy(r => r.Browser).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        ExtGrid.ItemsSource = _extRows;
+
+        var review = all.Count(e => e.Concern != Core.Rules.Concern.Info);
+        var high = all.Count(e => e.Concern == Core.Rules.Concern.High);
+        ExtCountText.Text = $"{_extRows.Count} of {all.Count} shown";
+        ExtensionsTab.Header = review > 0 ? $"Browser extensions ({review})" : "Browser extensions";
+
+        var groups = new List<string>();
+        void Add(Core.Browsers.ExtensionStatus st, string text)
+        {
+            var n = all.Count(e => e.Status == st && !e.BlockedByPolicy);
+            if (n > 0) groups.Add($"{n} {text}");
+        }
+        Add(Core.Browsers.ExtensionStatus.RemovedFromStore, "removed from the store");
+        Add(Core.Browsers.ExtensionStatus.Blocklisted, "blocked by Mozilla");
+        Add(Core.Browsers.ExtensionStatus.RetiredManifestV2, "retired (Manifest V2)");
+        Add(Core.Browsers.ExtensionStatus.UpdateAvailable, "out of date");
+        Add(Core.Browsers.ExtensionStatus.NotFromStore, "not from the store");
+        var broad = all.Count(e => e.Concern == Core.Rules.Concern.Review && e.Status is Core.Browsers.ExtensionStatus.UpToDate or Core.Browsers.ExtensionStatus.Unknown);
+        if (broad > 0) groups.Add($"{broad} with access to all websites to confirm");
+        ExtBanner.Visibility = review > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ExtBannerText.Text = review == 0 ? "" :
+            $"{review} extension(s) need attention: {string.Join(", ", groups)}. " +
+            (high > 0 ? "Red items should be removed. " : "") +
+            "Select them and use Block selected, or remove them in the browser. Hover over a status for details.";
+        if (_scan is not null && all.Count == 0)
+            ExtResultText.Text = "No extensions were found (or the check is turned off). Click Check extensions now to look again.";
+    }
+
+    private void ExtFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded) RenderExtensions();
+    }
+
+    private async void CheckExtensions_Click(object sender, RoutedEventArgs e)
+    {
+        ExtCheckButton.IsEnabled = false;
+        ExtResultText.Text = "Checking extensions with the stores...";
+        try
+        {
+            Core.Browsers.BrowserExtension[] list;
+            List<string> warnings;
+            if (_tray.AgentReachable)
+            {
+                var r = await _tray.Client.SendAsync(Commands.ScanExtensions, timeout: TimeSpan.FromMinutes(3));
+                if (!r.Ok) { ExtResultText.Text = r.Error ?? "The check failed."; return; }
+                var view = r.As<ExtensionScanView>();
+                list = view?.Extensions.ToArray() ?? [];
+                warnings = view?.Warnings ?? [];
+            }
+            else
+            {
+                warnings = [];
+                list = (await Scanner.ScanExtensionsAsync(true, false, warnings, CancellationToken.None)).ToArray();
+            }
+            _scan ??= new ScanResult { ComputerName = Environment.MachineName, ScannedAt = DateTimeOffset.Now };
+            _scan.Extensions = list.ToList();
+            RenderExtensions();
+            var review = list.Count(x => x.Concern != Core.Rules.Concern.Info);
+            ExtResultText.Text = $"Checked {list.Length} extension(s) at {DateTime.Now:HH:mm}: {review} need attention." +
+                                 (warnings.Count > 0 ? " " + string.Join(" ", warnings.Take(2)) : "");
+        }
+        catch (Exception ex) { ExtResultText.Text = $"The check failed: {ex.Message}"; }
+        finally { ExtCheckButton.IsEnabled = true; }
+    }
+
+    private List<ExtRow> SelectedExtRows() => ExtGrid.SelectedItems.OfType<ExtRow>().ToList();
+
+    private void ExtGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ExtGrid.SelectedItem is ExtRow r)
+            MessageBox.Show(this, $"{r.Name} {r.Version}{Environment.NewLine}{r.Browser} - {r.Owner}{Environment.NewLine}ID: {r.Id}{Environment.NewLine}" +
+                $"Installed from: {r.Source}{Environment.NewLine}Access: {r.Access}{Environment.NewLine}{Environment.NewLine}{r.Status}{Environment.NewLine}{r.Advice}",
+                "Extension details", MessageBoxButton.OK, r.Ext.Concern == Core.Rules.Concern.High ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
+    private void OpenExtensionStore_Click(object sender, RoutedEventArgs e)
+    {
+        var r = SelectedExtRows().FirstOrDefault();
+        if (r is null) { MessageBox.Show(this, "Select an extension first.", "Store page"); return; }
+        var url = r.Ext.StoreUrl ?? "https://www.bing.com/search?q=" + Uri.EscapeDataString($"{r.Name} {r.Browser} extension");
+        if (r.Ext.Status == Core.Browsers.ExtensionStatus.RemovedFromStore)
+            StatusBarText.Text = "This extension has been removed from the store, so the page will probably say it is not available.";
+        OpenUrl(url);
+    }
+
+    private void OpenExtensionProfile_Click(object sender, RoutedEventArgs e)
+    {
+        var r = SelectedExtRows().FirstOrDefault();
+        if (r is null || !Directory.Exists(r.Ext.ProfilePath)) return;
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{r.Ext.ProfilePath}\"") { UseShellExecute = true });
+    }
+
+    private async void BlockExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync(unblock: false);
+
+    private async void UnblockExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync(unblock: true);
+
+    private async Task ChangeExtensionPolicyAsync(bool unblock)
+    {
+        var rows = SelectedExtRows().GroupBy(r => (r.Ext.Browser, r.Ext.Id)).Select(g => g.First()).ToList();
+        if (rows.Count == 0) { MessageBox.Show(this, "Select the extension(s) first.", "Browser extensions"); return; }
+        if (!unblock && MessageBox.Show(this,
+                $"Block these extension(s) for every user on this PC?{Environment.NewLine}{Environment.NewLine}" +
+                string.Join(Environment.NewLine, rows.Select(r => $"  - {r.Name} ({r.Browser})")) +
+                $"{Environment.NewLine}{Environment.NewLine}This adds them to the browser's blocklist policy. When the browser next starts Chrome, Edge and Brave turn them off for good and Firefox uninstalls them. They can't be reinstalled until unblocked.",
+                "Block extensions", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+
+        ExtBlockButton.IsEnabled = false;
+        var lines = new List<string>();
+        var ok = true;
+        try
+        {
+            if (_tray.AgentReachable)
+            {
+                foreach (var r in rows)
+                {
+                    var res = await _tray.Client.SendAsync(Commands.BlockExtension, new BlockExtensionRequest(r.Ext.Browser, r.Id, r.Name, unblock));
+                    ok &= res.Ok;
+                    lines.Add(res.Ok ? res.As<string>() ?? "Done." : $"{r.Name}: {res.Error}");
+                }
+            }
+            else
+            {
+                // No agent: run the CLI elevated, once per browser.
+                var exe = Path.Combine(AppContext.BaseDirectory, "psentinel.exe");
+                if (!File.Exists(exe)) { MessageBox.Show(this, "psentinel.exe was not found next to the tray app.", "Browser extensions"); return; }
+                foreach (var g in rows.GroupBy(r => r.Ext.Browser))
+                {
+                    var args = $"extensions {(unblock ? "unblock" : "block")} --browser {g.Key}" + string.Concat(g.Select(r => $" --id \"{r.Id}\""));
+                    using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, args)
+                    {
+                        UseShellExecute = true, Verb = "runas", WindowStyle = System.Diagnostics.ProcessWindowStyle.Minimized,
+                    });
+                    if (p is null) continue;
+                    await p.WaitForExitAsync();
+                    ok &= p.ExitCode == 0;
+                    lines.Add($"{g.Key}: {(p.ExitCode == 0 ? (unblock ? "unblocked" : "blocked") : "failed")} {string.Join(", ", g.Select(r => r.Name))}");
+                }
+            }
+        }
+        catch (System.ComponentModel.Win32Exception) { lines.Add("Administrator approval was cancelled."); ok = false; }
+        catch (Exception ex) { lines.Add(ex.Message); ok = false; }
+        finally { ExtBlockButton.IsEnabled = true; }
+
+        if (!unblock && ok) lines.Add("Ask the user to close and reopen the browser so it takes effect.");
+        MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Browser extensions", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        foreach (var r in rows)
+            foreach (var x in (_scan?.Extensions ?? []).Where(x => x.Browser == r.Ext.Browser && x.Id == r.Id))
+                if (ok)
+                {
+                    x.BlockedByPolicy = !unblock;
+                    if (!unblock) { x.Concern = Core.Rules.Concern.Info; if (!x.Advice.StartsWith("Blocked", StringComparison.Ordinal)) x.Advice = "Blocked by policy: the browser turns it off (Firefox uninstalls it) at the next start and it can't be turned back on. " + x.Advice; }
+                }
+        RenderExtensions();
+        await LoadHistoryAsync();
+    }
+
+    private void ExportExtensions_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scan is null || _scan.Extensions.Count == 0) { MessageBox.Show(this, "There are no extensions to export yet.", "Export extensions"); return; }
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"PatchSentinel-browser-extensions-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}",
+            Filter = "Excel workbook (*.xlsx)|*.xlsx|HTML report (*.html)|*.html|CSV (*.csv)|*.csv",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        var list = _extRows.Select(r => r.Ext).ToList();
+        try
+        {
+            switch (Path.GetExtension(dlg.FileName).ToLowerInvariant())
+            {
+                case ".html": File.WriteAllText(dlg.FileName, ExtensionExporter.ToHtml(list, Environment.MachineName)); break;
+                case ".csv": File.WriteAllText(dlg.FileName, ExtensionExporter.ToCsv(list, Environment.MachineName), new System.Text.UTF8Encoding(true)); break;
+                default: using (var f = File.Create(dlg.FileName)) ExtensionExporter.WriteXlsx(list, Environment.MachineName, f); break;
+            }
+            StatusBarText.Text = $"Exported {list.Count} extensions to {dlg.FileName}";
+            if (MessageBox.Show(this, $"Exported {list.Count} extensions. Open the file now?", "Export extensions", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
     }
 
     // ---------------- history ----------------

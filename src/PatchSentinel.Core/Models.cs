@@ -179,6 +179,9 @@ public sealed class ScanCounts
     public int SoftwareToReview { get; set; }
     public int BuildChecksFailed { get; set; }
     public int BuildChecksWarn { get; set; }
+    /// <summary>Browser extensions that are retired, removed from the store, out of date or otherwise need a look.</summary>
+    public int ExtensionsToReview { get; set; }
+    public int ExtensionsHigh { get; set; }
 }
 
 public sealed class ScanResult
@@ -196,6 +199,7 @@ public sealed class ScanResult
     public List<InstalledItem> Inventory { get; set; } = [];
     public global::PatchSentinel.Core.Device.DeviceInfo? Device { get; set; }
     public List<global::PatchSentinel.Core.Device.BuildCheckResult> BuildChecks { get; set; } = [];
+    public List<Browsers.BrowserExtension> Extensions { get; set; } = [];
     public List<string> Warnings { get; set; } = [];
 
     public ScanCounts Counts => new()
@@ -208,6 +212,8 @@ public sealed class ScanResult
         SoftwareToReview = Inventory.Count(i => i.Classification?.Concern is Rules.Concern.Review or Rules.Concern.High),
         BuildChecksFailed = BuildChecks.Count(c => c.Status == global::PatchSentinel.Core.Device.CheckStatus.Fail),
         BuildChecksWarn = BuildChecks.Count(c => c.Status == global::PatchSentinel.Core.Device.CheckStatus.Warn),
+        ExtensionsToReview = Extensions.Count(e => e.Concern is Rules.Concern.Review or Rules.Concern.High),
+        ExtensionsHigh = Extensions.Count(e => e.Concern is Rules.Concern.High),
     };
 
     /// <summary>Copy without the (large) inventory, for IPC.</summary>

@@ -13,6 +13,7 @@ public sealed class ScanOptions
     public bool AllowNetwork { get; set; } = true;
     public bool ScanDependencies { get; set; } = true;
     public bool CollectDevice { get; set; } = true;
+    public bool CheckExtensions { get; set; } = true;
     public DateOnly? Today { get; set; }
 }
 
@@ -62,6 +63,10 @@ public static class Scanner
             if (catalog.BuildChecklist.Count > 0) checks = Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today);
         }
 
+        var extensions = s.ScanBrowserExtensions && opt.CheckExtensions
+            ? await ScanExtensionsAsync(s.ExtensionStoreLookup && opt.AllowNetwork, isSystem, warnings, ct)
+            : [];
+
         var updates = new List<UpdateCandidate>();
         if (opt.IncludeUpdates)
         {
@@ -89,8 +94,17 @@ public static class Scanner
             Inventory = inventory,
             Device = device,
             BuildChecks = checks,
+            Extensions = extensions,
             Warnings = warnings.Distinct().ToList(),
         };
+    }
+
+    public static async Task<List<Browsers.BrowserExtension>> ScanExtensionsAsync(bool online, bool isSystem, List<string> warnings, CancellationToken ct)
+    {
+        Browsers.ExtensionChecker.CacheDir = CacheDirFor(isSystem);
+        var list = await Task.Run(() => Browsers.ExtensionInventory.Collect(allUsers: isSystem || Platform.IsElevated, warnings), ct);
+        await Browsers.ExtensionChecker.CheckAsync(list, online, warnings, ct);
+        return list.OrderByDescending(e => e.Concern).ThenBy(e => e.BrowserName).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     /// <summary>Non-admin users cannot write to ProgramData\PatchSentinel, so they cache under LocalAppData.</summary>

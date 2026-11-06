@@ -1161,6 +1161,10 @@ public partial class MainWindow : Window
                 case "open":
                     if (a.Target is null || !Core.Device.BuildActions.IsSafeProgram(a.Target) || !File.Exists(a.Target))
                     { MessageBox.Show(this, "The program could not be found.", a.Label); return; }
+                    if (_tray.Status?.BusyWith is { } busy && MessageBox.Show(this,
+                            $"PatchSentinel is still busy: {busy}.{Environment.NewLine}{Environment.NewLine}If that is a manufacturer update run, opening the tool now can clash with it " +
+                            "(Lenovo System Update, for example, only allows one copy at a time). Wait until it finishes, or open anyway?",
+                            a.Label, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(a.Target, a.Args ?? "")
                     {
                         UseShellExecute = true, Verb = a.Elevate ? "runas" : "",

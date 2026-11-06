@@ -80,6 +80,18 @@ public sealed class WingetClient
     public Task<UpdateResult> InstallAsync(string id, CancellationToken ct) =>
         RunPackageCommandAsync("install", id, id, "--silent --accept-package-agreements --source winget", ct);
 
+    /// <summary>Installs from winget or the Microsoft Store (msstore, for all users), upgrading it if already installed.</summary>
+    /// <param name="location">Optional install folder; must be under Program Files.</param>
+    public Task<UpdateResult> InstallFromAsync(string id, string? source, CancellationToken ct, string? location = null)
+    {
+        if (source is "msstore")
+            return RunPackageCommandAsync("install", id, id, "--silent --accept-package-agreements --source msstore --scope machine", ct);
+        if (location is null) return InstallAsync(id, ct);
+        if (!Device.BuildActions.IsUnderProgramFiles(location) || location.Contains('"'))
+            return Task.FromResult(new UpdateResult(id, id, false, -1, "Install location must be under Program Files."));
+        return RunPackageCommandAsync("install", id, id, $"--silent --accept-package-agreements --source winget --location \"{location}\"", ct);
+    }
+
     public Task<UpdateResult> UninstallAsync(string id, CancellationToken ct) =>
         RunPackageCommandAsync("uninstall", id, id, "--silent", ct);
 

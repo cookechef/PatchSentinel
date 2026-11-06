@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.06.5",
+  "catalogVersion": "2026.11.06.6",
   "rules": [
     {
       "id": "dotnet-runtime",
@@ -1388,9 +1388,10 @@
         },
         {
           "id": "run-dcu",
-          "label": "Run Dell updates now",
+          "label": "Run Dell Command | Update now",
           "kind": "run",
           "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
           "paths": [
             "%ProgramFiles%\\Dell\\CommandUpdate\\dcu-cli.exe",
             "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\dcu-cli.exe"
@@ -1404,24 +1405,28 @@
           ],
           "timeoutMinutes": 90,
           "onlyWhenNotOk": false,
-          "description": "Runs Dell Command | Update silently as SYSTEM (BIOS, firmware and drivers). It does not restart the PC."
+          "description": "Runs Dell Command | Update silently as administrator (BIOS, firmware and drivers). It does not restart the PC; restart afterwards if updates were installed."
         },
         {
-          "id": "open-dcu",
-          "label": "Open Dell Command | Update",
-          "kind": "open",
-          "manufacturer": "Dell",
+          "id": "run-suhelper",
+          "label": "Run Commercial Vantage updates now",
+          "kind": "run",
+          "manufacturer": "Lenovo",
+          "model": "Think",
           "paths": [
-            "%ProgramFiles%\\Dell\\CommandUpdate\\DellCommandUpdate.exe",
-            "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\DellCommandUpdate.exe"
+            "%ProgramFiles%\\Lenovo\\SUHelper\\SUHelper.exe"
           ],
-          "elevate": true
+          "args": "-autoupdate -packagetype 1,2,3,4",
+          "timeoutMinutes": 120,
+          "onlyWhenNotOk": false,
+          "description": "Runs Lenovo Commercial Vantage's System Update silently through SUHelper (BIOS, firmware, drivers and Lenovo apps). BIOS and firmware updates can restart the PC, so save work first."
         },
         {
           "id": "run-lsu",
-          "label": "Run Lenovo updates now",
+          "label": "Run Lenovo System Update now",
           "kind": "run",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
@@ -1429,28 +1434,27 @@
           "args": "/CM -search A -action INSTALL -includerebootpackages 1,3,4 -noreboot -noicon -nolicense",
           "timeoutMinutes": 90,
           "onlyWhenNotOk": false,
-          "description": "Runs Lenovo System Update silently as SYSTEM (BIOS, firmware and drivers). It does not restart the PC."
+          "description": "Runs Lenovo System Update silently as administrator. It does not restart the PC."
         },
         {
-          "id": "open-lsu",
-          "label": "Open Lenovo System Update",
-          "kind": "open",
-          "manufacturer": "Lenovo",
-          "paths": [
-            "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
-            "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
-          ],
-          "elevate": true
-        },
-        {
-          "id": "open-hpsa",
-          "label": "Open HP Support Assistant",
-          "kind": "open",
+          "id": "run-hpia",
+          "label": "Run HP Image Assistant now",
+          "kind": "run",
           "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
           "paths": [
-            "%ProgramFiles(x86)%\\HP\\HP Support Framework\\HPSF.exe",
-            "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe"
-          ]
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
+          ],
+          "args": "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware /Selection:All /Silent /Noninteractive /ReportFolder:\"%ProgramData%\\PatchSentinel\\logs\\hpia\" /SoftpaqDownloadFolder:\"%ProgramData%\\PatchSentinel\\cache\\hpia\"",
+          "okExitCodes": [
+            0,
+            256,
+            257,
+            3010
+          ],
+          "timeoutMinutes": 120,
+          "onlyWhenNotOk": false,
+          "description": "Runs HP Image Assistant silently as administrator and installs the recommended BIOS, firmware and driver updates. It does not restart the PC; restart afterwards (exit code 3010 means a restart is needed)."
         }
       ]
     },
@@ -1467,16 +1471,44 @@
           "kind": "winget",
           "wingetId": "Dell.CommandUpdate.Universal",
           "manufacturer": "Dell",
-          "ifMissing": [
-            "%ProgramFiles%\\Dell\\CommandUpdate\\dcu-cli.exe",
-            "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\dcu-cli.exe"
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
+          "ifAppMissing": [
+            "Dell Command \\| Update",
+            "Dell Command Update"
           ]
         },
         {
+          "id": "update-dcu",
+          "label": "Update Dell Command | Update",
+          "kind": "winget",
+          "wingetId": "Dell.CommandUpdate.Universal",
+          "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
+          "ifAppPresent": [
+            "Dell Command \\| Update for Windows Universal"
+          ],
+          "ifAppVersionBelow": "5.0",
+          "description": "This is an old version. Installs the current Dell Command | Update for Windows Universal."
+        },
+        {
+          "id": "update-dcu-classic",
+          "label": "Update Dell Command | Update",
+          "kind": "winget",
+          "wingetId": "Dell.CommandUpdate",
+          "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
+          "ifAppPresent": [
+            "Dell Command \\| Update(?!.*Universal)"
+          ],
+          "ifAppVersionBelow": "5.0",
+          "description": "This is an old version. Upgrades it to the current Dell Command | Update."
+        },
+        {
           "id": "run-dcu",
-          "label": "Run Dell updates now",
+          "label": "Run Dell Command | Update now",
           "kind": "run",
           "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
           "paths": [
             "%ProgramFiles%\\Dell\\CommandUpdate\\dcu-cli.exe",
             "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\dcu-cli.exe"
@@ -1490,13 +1522,14 @@
           ],
           "timeoutMinutes": 90,
           "onlyWhenNotOk": false,
-          "description": "Runs Dell Command | Update silently as SYSTEM (BIOS, firmware and drivers). It does not restart the PC."
+          "description": "Runs Dell Command | Update silently as administrator (BIOS, firmware and drivers). It does not restart the PC; restart afterwards if updates were installed."
         },
         {
           "id": "open-dcu",
           "label": "Open Dell Command | Update",
           "kind": "open",
           "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
           "paths": [
             "%ProgramFiles%\\Dell\\CommandUpdate\\DellCommandUpdate.exe",
             "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\DellCommandUpdate.exe"
@@ -1504,11 +1537,119 @@
           "elevate": true
         },
         {
+          "id": "get-sa",
+          "label": "Download SupportAssist",
+          "kind": "url",
+          "url": "https://www.dell.com/support/assist",
+          "manufacturer": "Dell",
+          "model": "Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b",
+          "ifAppMissing": [
+            "SupportAssist"
+          ],
+          "onlyWhenNotOk": true,
+          "description": "Inspiron, Vostro, Alienware and Dell Plus/Premium models use SupportAssist rather than Dell Command | Update."
+        },
+        {
+          "id": "open-sa",
+          "label": "Open SupportAssist",
+          "kind": "open",
+          "manufacturer": "Dell",
+          "model": "Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b",
+          "paths": [
+            "%ProgramFiles%\\Dell\\SupportAssistAgent\\bin\\SupportAssistLauncher.exe"
+          ]
+        },
+        {
+          "id": "install-cv",
+          "label": "Install Lenovo Commercial Vantage",
+          "kind": "winget",
+          "wingetId": "9NR5B8GVVM13",
+          "wingetSource": "msstore",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "ifMissing": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoSettingsforEnterprise_*"
+          ],
+          "ifAppMissing": [
+            "Lenovo Commercial Vantage"
+          ],
+          "description": "Installs Lenovo Commercial Vantage from the Microsoft Store for all users. It is the update tool for ThinkPad, ThinkCentre, ThinkBook and ThinkStation (Lenovo System Update is the older tool)."
+        },
+        {
+          "id": "install-suhelper",
+          "label": "Install Lenovo SUHelper",
+          "kind": "winget",
+          "wingetId": "Lenovo.SUHelper",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "ifMissing": [
+            "%ProgramFiles%\\Lenovo\\SUHelper\\SUHelper.exe"
+          ],
+          "onlyWhenNotOk": false,
+          "description": "Lenovo's command-line companion to Commercial Vantage, so PatchSentinel can run Lenovo updates silently."
+        },
+        {
+          "id": "run-suhelper",
+          "label": "Run Commercial Vantage updates now",
+          "kind": "run",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "paths": [
+            "%ProgramFiles%\\Lenovo\\SUHelper\\SUHelper.exe"
+          ],
+          "args": "-autoupdate -packagetype 1,2,3,4",
+          "timeoutMinutes": 120,
+          "onlyWhenNotOk": false,
+          "description": "Runs Lenovo Commercial Vantage's System Update silently through SUHelper (BIOS, firmware, drivers and Lenovo apps). BIOS and firmware updates can restart the PC, so save work first."
+        },
+        {
+          "id": "open-cv",
+          "label": "Open Commercial Vantage",
+          "kind": "open",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "paths": [
+            "%SystemRoot%\\explorer.exe"
+          ],
+          "args": "shell:AppsFolder\\E046963F.LenovoSettingsforEnterprise_k1h2ywk1493x8!App",
+          "ifInstalled": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoSettingsforEnterprise_*"
+          ]
+        },
+        {
+          "id": "install-vantage",
+          "label": "Install Lenovo Vantage",
+          "kind": "winget",
+          "wingetId": "9WZDNCRFJ4MV",
+          "wingetSource": "msstore",
+          "manufacturer": "Lenovo",
+          "model": "IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b",
+          "ifMissing": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoCompanion_*"
+          ],
+          "description": "Installs Lenovo Vantage from the Microsoft Store (the update tool for IdeaPad, Yoga, Legion, LOQ and V series)."
+        },
+        {
+          "id": "open-vantage",
+          "label": "Open Lenovo Vantage",
+          "kind": "open",
+          "manufacturer": "Lenovo",
+          "model": "IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b",
+          "paths": [
+            "%SystemRoot%\\explorer.exe"
+          ],
+          "args": "shell:AppsFolder\\E046963F.LenovoCompanion_k1h2ywk1493x8!App",
+          "ifInstalled": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoCompanion_*"
+          ]
+        },
+        {
           "id": "install-lsu",
           "label": "Install Lenovo System Update",
           "kind": "winget",
           "wingetId": "Lenovo.SystemUpdate",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "ifMissing": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
@@ -1516,9 +1657,10 @@
         },
         {
           "id": "run-lsu",
-          "label": "Run Lenovo updates now",
+          "label": "Run Lenovo System Update now",
           "kind": "run",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
@@ -1526,16 +1668,61 @@
           "args": "/CM -search A -action INSTALL -includerebootpackages 1,3,4 -noreboot -noicon -nolicense",
           "timeoutMinutes": 90,
           "onlyWhenNotOk": false,
-          "description": "Runs Lenovo System Update silently as SYSTEM (BIOS, firmware and drivers). It does not restart the PC."
+          "description": "Runs Lenovo System Update silently as administrator. It does not restart the PC."
         },
         {
           "id": "open-lsu",
           "label": "Open Lenovo System Update",
           "kind": "open",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
+          ],
+          "elevate": true
+        },
+        {
+          "id": "install-hpia",
+          "label": "Install HP Image Assistant",
+          "kind": "winget",
+          "wingetId": "HP.ImageAssistant",
+          "wingetLocation": "%ProgramFiles%\\HP\\HPImageAssistant",
+          "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
+          "ifMissing": [
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
+          ],
+          "description": "HP Image Assistant is HP's tool for business models (EliteBook, ProBook, ZBook, Elite and Pro desktops). It is installed into Program Files so it can be run safely as administrator."
+        },
+        {
+          "id": "run-hpia",
+          "label": "Run HP Image Assistant now",
+          "kind": "run",
+          "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
+          "paths": [
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
+          ],
+          "args": "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware /Selection:All /Silent /Noninteractive /ReportFolder:\"%ProgramData%\\PatchSentinel\\logs\\hpia\" /SoftpaqDownloadFolder:\"%ProgramData%\\PatchSentinel\\cache\\hpia\"",
+          "okExitCodes": [
+            0,
+            256,
+            257,
+            3010
+          ],
+          "timeoutMinutes": 120,
+          "onlyWhenNotOk": false,
+          "description": "Runs HP Image Assistant silently as administrator and installs the recommended BIOS, firmware and driver updates. It does not restart the PC; restart afterwards (exit code 3010 means a restart is needed)."
+        },
+        {
+          "id": "open-hpia",
+          "label": "Open HP Image Assistant",
+          "kind": "open",
+          "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
+          "paths": [
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
           ],
           "elevate": true
         },
@@ -1545,20 +1732,52 @@
           "kind": "winget",
           "wingetId": "HP.SupportAssistant",
           "manufacturer": "HP|Hewlett",
+          "model": "^(?!.*(?:Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b))",
           "ifMissing": [
             "%ProgramFiles(x86)%\\HP\\HP Support Framework\\HPSF.exe",
-            "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe"
-          ]
+            "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe",
+            "%ProgramFiles%\\WindowsApps\\AD2F1837.HPSupportAssistant_*"
+          ],
+          "ifAppMissing": [
+            "HP Support Assistant"
+          ],
+          "description": "HP Support Assistant is HP's update tool for consumer models (Pavilion, ENVY, Spectre, OMEN, Victus, HP Laptop)."
         },
         {
           "id": "open-hpsa",
           "label": "Open HP Support Assistant",
           "kind": "open",
           "manufacturer": "HP|Hewlett",
+          "model": "^(?!.*(?:Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b))",
+          "paths": [
+            "%SystemRoot%\\explorer.exe"
+          ],
+          "args": "shell:AppsFolder\\AD2F1837.HPSupportAssistant_v10z8vjag6ke6!App",
+          "ifInstalled": [
+            "%ProgramFiles%\\WindowsApps\\AD2F1837.HPSupportAssistant_*"
+          ]
+        },
+        {
+          "id": "open-hpsf",
+          "label": "Open HP Support Assistant",
+          "kind": "open",
+          "manufacturer": "HP|Hewlett",
+          "model": "^(?!.*(?:Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\HP\\HP Support Framework\\HPSF.exe",
             "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe"
+          ],
+          "ifMissing": [
+            "%ProgramFiles%\\WindowsApps\\AD2F1837.HPSupportAssistant_*"
           ]
+        },
+        {
+          "id": "surface-wu",
+          "label": "Open Windows Update (optional updates)",
+          "kind": "url",
+          "url": "ms-settings:windowsupdate-optionalupdates",
+          "manufacturer": "^Microsoft",
+          "model": "Surface"
         }
       ]
     },
@@ -1596,7 +1815,7 @@
     {
       "step": 5,
       "id": "oem-tool",
-      "title": "Install the manufacturer update tool (Dell Command | Update, Lenovo Vantage, HP Support Assistant)",
+      "title": "Install and run the manufacturer update tool (Dell Command | Update or SupportAssist, Lenovo Commercial Vantage, HP Image Assistant or Support Assistant)",
       "type": "builtin",
       "check": "oemTools",
       "actions": [
@@ -1606,16 +1825,44 @@
           "kind": "winget",
           "wingetId": "Dell.CommandUpdate.Universal",
           "manufacturer": "Dell",
-          "ifMissing": [
-            "%ProgramFiles%\\Dell\\CommandUpdate\\dcu-cli.exe",
-            "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\dcu-cli.exe"
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
+          "ifAppMissing": [
+            "Dell Command \\| Update",
+            "Dell Command Update"
           ]
         },
         {
+          "id": "update-dcu",
+          "label": "Update Dell Command | Update",
+          "kind": "winget",
+          "wingetId": "Dell.CommandUpdate.Universal",
+          "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
+          "ifAppPresent": [
+            "Dell Command \\| Update for Windows Universal"
+          ],
+          "ifAppVersionBelow": "5.0",
+          "description": "This is an old version. Installs the current Dell Command | Update for Windows Universal."
+        },
+        {
+          "id": "update-dcu-classic",
+          "label": "Update Dell Command | Update",
+          "kind": "winget",
+          "wingetId": "Dell.CommandUpdate",
+          "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
+          "ifAppPresent": [
+            "Dell Command \\| Update(?!.*Universal)"
+          ],
+          "ifAppVersionBelow": "5.0",
+          "description": "This is an old version. Upgrades it to the current Dell Command | Update."
+        },
+        {
           "id": "run-dcu",
-          "label": "Run Dell updates now",
+          "label": "Run Dell Command | Update now",
           "kind": "run",
           "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
           "paths": [
             "%ProgramFiles%\\Dell\\CommandUpdate\\dcu-cli.exe",
             "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\dcu-cli.exe"
@@ -1629,13 +1876,14 @@
           ],
           "timeoutMinutes": 90,
           "onlyWhenNotOk": false,
-          "description": "Runs Dell Command | Update silently as SYSTEM (BIOS, firmware and drivers). It does not restart the PC."
+          "description": "Runs Dell Command | Update silently as administrator (BIOS, firmware and drivers). It does not restart the PC; restart afterwards if updates were installed."
         },
         {
           "id": "open-dcu",
           "label": "Open Dell Command | Update",
           "kind": "open",
           "manufacturer": "Dell",
+          "model": "^(?!.*(?:Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b))",
           "paths": [
             "%ProgramFiles%\\Dell\\CommandUpdate\\DellCommandUpdate.exe",
             "%ProgramFiles(x86)%\\Dell\\CommandUpdate\\DellCommandUpdate.exe"
@@ -1643,11 +1891,119 @@
           "elevate": true
         },
         {
+          "id": "get-sa",
+          "label": "Download SupportAssist",
+          "kind": "url",
+          "url": "https://www.dell.com/support/assist",
+          "manufacturer": "Dell",
+          "model": "Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b",
+          "ifAppMissing": [
+            "SupportAssist"
+          ],
+          "onlyWhenNotOk": true,
+          "description": "Inspiron, Vostro, Alienware and Dell Plus/Premium models use SupportAssist rather than Dell Command | Update."
+        },
+        {
+          "id": "open-sa",
+          "label": "Open SupportAssist",
+          "kind": "open",
+          "manufacturer": "Dell",
+          "model": "Inspiron|Vostro|Alienware|\\bG1[5-6]\\b|\\bPlus\\b|\\bPremium\\b|Dell (?:14|15|16)\\b",
+          "paths": [
+            "%ProgramFiles%\\Dell\\SupportAssistAgent\\bin\\SupportAssistLauncher.exe"
+          ]
+        },
+        {
+          "id": "install-cv",
+          "label": "Install Lenovo Commercial Vantage",
+          "kind": "winget",
+          "wingetId": "9NR5B8GVVM13",
+          "wingetSource": "msstore",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "ifMissing": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoSettingsforEnterprise_*"
+          ],
+          "ifAppMissing": [
+            "Lenovo Commercial Vantage"
+          ],
+          "description": "Installs Lenovo Commercial Vantage from the Microsoft Store for all users. It is the update tool for ThinkPad, ThinkCentre, ThinkBook and ThinkStation (Lenovo System Update is the older tool)."
+        },
+        {
+          "id": "install-suhelper",
+          "label": "Install Lenovo SUHelper",
+          "kind": "winget",
+          "wingetId": "Lenovo.SUHelper",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "ifMissing": [
+            "%ProgramFiles%\\Lenovo\\SUHelper\\SUHelper.exe"
+          ],
+          "onlyWhenNotOk": false,
+          "description": "Lenovo's command-line companion to Commercial Vantage, so PatchSentinel can run Lenovo updates silently."
+        },
+        {
+          "id": "run-suhelper",
+          "label": "Run Commercial Vantage updates now",
+          "kind": "run",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "paths": [
+            "%ProgramFiles%\\Lenovo\\SUHelper\\SUHelper.exe"
+          ],
+          "args": "-autoupdate -packagetype 1,2,3,4",
+          "timeoutMinutes": 120,
+          "onlyWhenNotOk": false,
+          "description": "Runs Lenovo Commercial Vantage's System Update silently through SUHelper (BIOS, firmware, drivers and Lenovo apps). BIOS and firmware updates can restart the PC, so save work first."
+        },
+        {
+          "id": "open-cv",
+          "label": "Open Commercial Vantage",
+          "kind": "open",
+          "manufacturer": "Lenovo",
+          "model": "Think",
+          "paths": [
+            "%SystemRoot%\\explorer.exe"
+          ],
+          "args": "shell:AppsFolder\\E046963F.LenovoSettingsforEnterprise_k1h2ywk1493x8!App",
+          "ifInstalled": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoSettingsforEnterprise_*"
+          ]
+        },
+        {
+          "id": "install-vantage",
+          "label": "Install Lenovo Vantage",
+          "kind": "winget",
+          "wingetId": "9WZDNCRFJ4MV",
+          "wingetSource": "msstore",
+          "manufacturer": "Lenovo",
+          "model": "IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b",
+          "ifMissing": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoCompanion_*"
+          ],
+          "description": "Installs Lenovo Vantage from the Microsoft Store (the update tool for IdeaPad, Yoga, Legion, LOQ and V series)."
+        },
+        {
+          "id": "open-vantage",
+          "label": "Open Lenovo Vantage",
+          "kind": "open",
+          "manufacturer": "Lenovo",
+          "model": "IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b",
+          "paths": [
+            "%SystemRoot%\\explorer.exe"
+          ],
+          "args": "shell:AppsFolder\\E046963F.LenovoCompanion_k1h2ywk1493x8!App",
+          "ifInstalled": [
+            "%ProgramFiles%\\WindowsApps\\E046963F.LenovoCompanion_*"
+          ]
+        },
+        {
           "id": "install-lsu",
           "label": "Install Lenovo System Update",
           "kind": "winget",
           "wingetId": "Lenovo.SystemUpdate",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "ifMissing": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
@@ -1655,9 +2011,10 @@
         },
         {
           "id": "run-lsu",
-          "label": "Run Lenovo updates now",
+          "label": "Run Lenovo System Update now",
           "kind": "run",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
@@ -1665,16 +2022,61 @@
           "args": "/CM -search A -action INSTALL -includerebootpackages 1,3,4 -noreboot -noicon -nolicense",
           "timeoutMinutes": 90,
           "onlyWhenNotOk": false,
-          "description": "Runs Lenovo System Update silently as SYSTEM (BIOS, firmware and drivers). It does not restart the PC."
+          "description": "Runs Lenovo System Update silently as administrator. It does not restart the PC."
         },
         {
           "id": "open-lsu",
           "label": "Open Lenovo System Update",
           "kind": "open",
           "manufacturer": "Lenovo",
+          "model": "^(?!.*(?:Think|IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\\bV1[45]\\b|\\bV\\d{2}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\Lenovo\\System Update\\tvsu.exe",
             "%ProgramFiles%\\Lenovo\\System Update\\tvsu.exe"
+          ],
+          "elevate": true
+        },
+        {
+          "id": "install-hpia",
+          "label": "Install HP Image Assistant",
+          "kind": "winget",
+          "wingetId": "HP.ImageAssistant",
+          "wingetLocation": "%ProgramFiles%\\HP\\HPImageAssistant",
+          "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
+          "ifMissing": [
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
+          ],
+          "description": "HP Image Assistant is HP's tool for business models (EliteBook, ProBook, ZBook, Elite and Pro desktops). It is installed into Program Files so it can be run safely as administrator."
+        },
+        {
+          "id": "run-hpia",
+          "label": "Run HP Image Assistant now",
+          "kind": "run",
+          "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
+          "paths": [
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
+          ],
+          "args": "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware /Selection:All /Silent /Noninteractive /ReportFolder:\"%ProgramData%\\PatchSentinel\\logs\\hpia\" /SoftpaqDownloadFolder:\"%ProgramData%\\PatchSentinel\\cache\\hpia\"",
+          "okExitCodes": [
+            0,
+            256,
+            257,
+            3010
+          ],
+          "timeoutMinutes": 120,
+          "onlyWhenNotOk": false,
+          "description": "Runs HP Image Assistant silently as administrator and installs the recommended BIOS, firmware and driver updates. It does not restart the PC; restart afterwards (exit code 3010 means a restart is needed)."
+        },
+        {
+          "id": "open-hpia",
+          "label": "Open HP Image Assistant",
+          "kind": "open",
+          "manufacturer": "HP|Hewlett",
+          "model": "Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b",
+          "paths": [
+            "%ProgramFiles%\\HP\\HPImageAssistant\\HPImageAssistant.exe"
           ],
           "elevate": true
         },
@@ -1684,20 +2086,52 @@
           "kind": "winget",
           "wingetId": "HP.SupportAssistant",
           "manufacturer": "HP|Hewlett",
+          "model": "^(?!.*(?:Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b))",
           "ifMissing": [
             "%ProgramFiles(x86)%\\HP\\HP Support Framework\\HPSF.exe",
-            "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe"
-          ]
+            "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe",
+            "%ProgramFiles%\\WindowsApps\\AD2F1837.HPSupportAssistant_*"
+          ],
+          "ifAppMissing": [
+            "HP Support Assistant"
+          ],
+          "description": "HP Support Assistant is HP's update tool for consumer models (Pavilion, ENVY, Spectre, OMEN, Victus, HP Laptop)."
         },
         {
           "id": "open-hpsa",
           "label": "Open HP Support Assistant",
           "kind": "open",
           "manufacturer": "HP|Hewlett",
+          "model": "^(?!.*(?:Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b))",
+          "paths": [
+            "%SystemRoot%\\explorer.exe"
+          ],
+          "args": "shell:AppsFolder\\AD2F1837.HPSupportAssistant_v10z8vjag6ke6!App",
+          "ifInstalled": [
+            "%ProgramFiles%\\WindowsApps\\AD2F1837.HPSupportAssistant_*"
+          ]
+        },
+        {
+          "id": "open-hpsf",
+          "label": "Open HP Support Assistant",
+          "kind": "open",
+          "manufacturer": "HP|Hewlett",
+          "model": "^(?!.*(?:Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\\bZ\\d|\\bHP Pro\\b|\\bmt\\d{2}|\\bt\\d{3}\\b))",
           "paths": [
             "%ProgramFiles(x86)%\\HP\\HP Support Framework\\HPSF.exe",
             "%ProgramFiles%\\HP\\HP Support Framework\\HPSF.exe"
+          ],
+          "ifMissing": [
+            "%ProgramFiles%\\WindowsApps\\AD2F1837.HPSupportAssistant_*"
           ]
+        },
+        {
+          "id": "surface-wu",
+          "label": "Open Windows Update (optional updates)",
+          "kind": "url",
+          "url": "ms-settings:windowsupdate-optionalupdates",
+          "manufacturer": "^Microsoft",
+          "model": "Surface"
         }
       ]
     },

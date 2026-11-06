@@ -211,11 +211,20 @@ public static class BuildChecklist
 
     private static BuildCheckResult ToolResult(OemToolStatus t, DateOnly today)
     {
-        if (!t.Installed) return R(CheckStatus.Fail, $"{t.Tool} is not installed. Download: {t.DownloadUrl}");
+        if (t.BuiltIn)
+            return R(CheckStatus.Pass, $"No manufacturer tool needed: {t.InstalledName}. Run Windows Update (step 2) until nothing is left, including optional driver and firmware updates.");
+        if (!t.Installed)
+            return t.LegacyInstalled is { } legacy
+                ? R(CheckStatus.Warn, $"{legacy} is installed, but {t.Tool} is the tool for this model. Install {t.Tool} (button), then run it. Download: {t.DownloadUrl}")
+                : R(CheckStatus.Fail, $"{t.Tool} is not installed (it is the tool for this model). Install it with the button, or download: {t.DownloadUrl}");
+        var outdated = t.MinVersion is { } min && t.InstalledVersion is { } v && VersionUtil.Compare(v, min) < 0;
+        if (outdated)
+            return R(CheckStatus.Warn, $"{t.InstalledName} {t.InstalledVersion} is an old version (use {t.MinVersion} or later). Update it with the button, then run it.");
         if (t.LastActivity is null) return R(CheckStatus.Warn, $"{t.InstalledName} is installed but there is no sign it has ever been run. Open it and install the recommended updates.");
         var days = today.DayNumber - DateOnly.FromDateTime(t.LastActivity.Value.LocalDateTime).DayNumber;
+        var ver = string.IsNullOrEmpty(t.InstalledVersion) ? "" : $" {t.InstalledVersion}";
         return days > 90
-            ? R(CheckStatus.Warn, $"{t.InstalledName} last ran {t.LastActivity:dd MMM yyyy} ({days} days ago). Run it again for current drivers.")
-            : R(CheckStatus.Pass, $"{t.InstalledName} installed, last ran {t.LastActivity:dd MMM yyyy}.");
+            ? R(CheckStatus.Warn, $"{t.InstalledName}{ver} last ran {t.LastActivity:dd MMM yyyy} ({days} days ago). Run it again for current drivers.")
+            : R(CheckStatus.Pass, $"{t.InstalledName}{ver} installed, last ran {t.LastActivity:dd MMM yyyy}.");
     }
 }

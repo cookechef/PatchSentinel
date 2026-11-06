@@ -163,6 +163,13 @@ public sealed class OemToolStatus
     /// <summary>Newest log/data file written by the tool - evidence it has actually run.</summary>
     public DateTimeOffset? LastActivity { get; set; }
     public string? DownloadUrl { get; set; }
+    /// <summary>Versions older than this should be updated.</summary>
+    public string? MinVersion { get; set; }
+    /// <summary>An older tool found instead (e.g. Lenovo System Update on a ThinkPad that should use Commercial Vantage).</summary>
+    public string? LegacyInstalled { get; set; }
+    public string? LegacyName { get; set; }
+    /// <summary>Handled by Windows itself (Surface: Windows Update), nothing to install.</summary>
+    public bool BuiltIn { get; set; }
 }
 
 public enum CheckStatus { Pass, Warn, Fail, Info, Manual }

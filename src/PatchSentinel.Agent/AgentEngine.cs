@@ -333,7 +333,7 @@ internal sealed class AgentEngine
             else if (action.WingetId is null || !WingetClient.IsValidId(action.WingetId)) { ok = false; msg = "Invalid package id in the checklist."; }
             else
             {
-                var res = await winget.InstallAsync(action.WingetId, ct);
+                var res = await winget.InstallFromAsync(action.WingetId, action.WingetSource, ct, action.WingetLocation is { } loc ? Core.Device.BuildActions.Expand(loc) : null);
                 ok = res.Success;
                 msg = res.Message;
             }
@@ -344,7 +344,7 @@ internal sealed class AgentEngine
             if (exe is null) { ok = false; msg = "The program is not installed (or not in Program Files)."; }
             else
             {
-                var res = await ProcessRunner.RunAsync(exe, action.Args ?? "", TimeSpan.FromMinutes(Math.Clamp(action.TimeoutMinutes, 1, 240)), ct);
+                var res = await ProcessRunner.RunAsync(exe, Environment.ExpandEnvironmentVariables(action.Args ?? ""), TimeSpan.FromMinutes(Math.Clamp(action.TimeoutMinutes, 1, 240)), ct);
                 ok = !res.TimedOut && action.OkExitCodes.Contains(res.ExitCode);
                 msg = res.TimedOut ? $"Timed out after {action.TimeoutMinutes} minutes." : $"Finished with exit code {res.ExitCode}{(ok ? "" : " (failed)")}.";
                 var tail = (res.StdOut + res.StdErr).Trim();

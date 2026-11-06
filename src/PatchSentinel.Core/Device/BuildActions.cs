@@ -20,6 +20,10 @@ public sealed class BuildAction
     public string? Url { get; set; }
     public string? Link { get; set; }
     public string? WingetId { get; set; }
+    /// <summary>winget (default) or msstore (Microsoft Store app, installed for all users).</summary>
+    public string? WingetSource { get; set; }
+    /// <summary>winget --location (must be under Program Files), for packages that would otherwise unpack somewhere users can write to.</summary>
+    public string? WingetLocation { get; set; }
     public List<string> Paths { get; set; } = [];
     public string? Args { get; set; }
     /// <summary>open: ask for administrator approval.</summary>
@@ -31,6 +35,8 @@ public sealed class BuildAction
 
     /// <summary>Regex on the device manufacturer (e.g. "Dell", "Lenovo", "HP|Hewlett").</summary>
     public string? Manufacturer { get; set; }
+    /// <summary>Regex on the model and product name (e.g. "Latitude|OptiPlex", "Think").</summary>
+    public string? Model { get; set; }
     /// <summary>Regex on the processor name (e.g. "Intel").</summary>
     public string? Processor { get; set; }
     /// <summary>Only show when one of these files exists (defaults to Paths for open/run).</summary>
@@ -39,6 +45,10 @@ public sealed class BuildAction
     public List<string> IfMissing { get; set; } = [];
     /// <summary>Only show when no installed app name matches (regex fragments).</summary>
     public List<string> IfAppMissing { get; set; } = [];
+    /// <summary>Only show when an installed app name matches (regex fragments).</summary>
+    public List<string> IfAppPresent { get; set; } = [];
+    /// <summary>With IfAppPresent: only show when that app's version is older than this.</summary>
+    public string? IfAppVersionBelow { get; set; }
     /// <summary>Only show when the step is not OK (default for winget and run).</summary>
     public bool? OnlyWhenNotOk { get; set; }
 }
@@ -61,6 +71,9 @@ public static class BuildActions
 {
     private static readonly string[] AllowedSchemes = ["https://", "ms-settings:", "windowsdefender:"];
 
+    /// <summary>Text the Model pattern is matched against.</summary>
+    public static string ModelText(DeviceInfo d) => string.Join(" ", new[] { d.ProductName, d.Model, d.SystemSku }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
     public static string Expand(string path) => Environment.ExpandEnvironmentVariables(path.Replace("%ProgramFiles(x86)%", Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Programs may only be started from Program Files or Windows\System32, so a catalogue entry cannot point at a user-writable folder.</summary>
@@ -75,7 +88,21 @@ public static class BuildActions
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 Environment.GetFolderPath(Environment.SpecialFolder.System),
             }.Where(r => !string.IsNullOrEmpty(r)).Select(r => r.TrimEnd('\\') + "\\");
+            var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            if (p.Equals(explorer, StringComparison.OrdinalIgnoreCase)) return true; // for opening Microsoft Store apps
             return roots.Any(r => p.StartsWith(r, StringComparison.OrdinalIgnoreCase)) && !p.Contains("..", StringComparison.Ordinal);
+        }
+        catch { return false; }
+    }
+
+    public static bool IsUnderProgramFiles(string path)
+    {
+        try
+        {
+            var p = Path.GetFullPath(Expand(path)).TrimEnd('\\') + "\\";
+            return new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 }
+                .Select(Environment.GetFolderPath).Where(r => !string.IsNullOrEmpty(r))
+                .Any(r => p.StartsWith(r.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) && !path.Contains("..");
         }
         catch { return false; }
     }
@@ -84,6 +111,23 @@ public static class BuildActions
 
     public static string? FirstExisting(IEnumerable<string> paths) =>
         paths.Select(Expand).FirstOrDefault(p => File.Exists(p) && IsSafeProgram(p));
+
+    /// <summary>True if the file or folder exists. A * in the last part matches folders too (Microsoft Store app folders in WindowsApps).</summary>
+    public static bool Exists(string path)
+    {
+        var p = Expand(path);
+        if (!p.Contains('*')) return File.Exists(p) || Directory.Exists(p);
+        try
+        {
+            var dir = Path.GetDirectoryName(p);
+            var pattern = Path.GetFileName(p);
+            return dir is not null && Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir, pattern).Any();
+        }
+        catch { return false; } // WindowsApps can only be listed by SYSTEM/admins
+    }
+
+    private static Regex AppRx(IEnumerable<string> fragments) =>
+        new(@"(?<![A-Za-z0-9])(?:" + string.Join("|", fragments) + ")", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
 
     public static string? ResolveUrl(BuildAction a, IReadOnlyDictionary<string, string> links)
     {
@@ -101,16 +145,20 @@ public static class BuildActions
             try
             {
                 if (a.Manufacturer is { Length: > 0 } m && !Regex.IsMatch(d.Manufacturer ?? "", m, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100))) continue;
+                if (a.Model is { Length: > 0 } mo && !Regex.IsMatch(ModelText(d), mo, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100))) continue;
                 if (a.Processor is { Length: > 0 } pr && !Regex.IsMatch(d.CpuName ?? "", pr, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100))) continue;
                 var onlyNotOk = a.OnlyWhenNotOk ?? a.Kind is "winget" or "run";
                 if (onlyNotOk && result.Status == CheckStatus.Pass) continue;
-                if (a.IfMissing.Count > 0 && a.IfMissing.Select(Expand).Any(File.Exists)) continue;
+                if (a.IfMissing.Count > 0 && a.IfMissing.Any(Exists)) continue;
                 var mustExist = a.IfInstalled.Count > 0 ? a.IfInstalled : a.Kind is "open" or "run" ? a.Paths : [];
-                if (mustExist.Count > 0 && !mustExist.Select(Expand).Any(File.Exists)) continue;
-                if (a.IfAppMissing.Count > 0)
+                if (mustExist.Count > 0 && !mustExist.Any(Exists)) continue;
+                if (a.IfAppMissing.Count > 0 && apps.Any(i => AppRx(a.IfAppMissing).IsMatch(i.Name))) continue;
+                if (a.IfAppPresent.Count > 0)
                 {
-                    var rx = new Regex(@"(?<![A-Za-z0-9])(?:" + string.Join("|", a.IfAppMissing) + ")", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
-                    if (apps.Any(i => rx.IsMatch(i.Name))) continue;
+                    var rx = AppRx(a.IfAppPresent);
+                    var hits = apps.Where(i => rx.IsMatch(i.Name)).ToList();
+                    if (hits.Count == 0) continue;
+                    if (a.IfAppVersionBelow is { } below && !hits.Any(i => i.Version is not null && VersionUtil.Compare(i.Version, below) < 0)) continue;
                 }
 
                 var v = new BuildActionView { Id = a.Id, Label = a.Label, Kind = a.Kind, Description = a.Description, Elevate = a.Elevate, Args = a.Args };

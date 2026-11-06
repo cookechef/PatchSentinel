@@ -11,28 +11,64 @@ namespace PatchSentinel.Core.Device;
 /// </summary>
 public static class DeviceCollector
 {
-    private sealed record OemToolDef(string Vendor, string Tool, string ManufacturerPattern, string AppPattern, string[] Folders, string[] StoreApps, string DownloadUrl);
+    /// <param name="ModelPattern">Regex on the model/product name; empty = any model (the fallback for that make).</param>
+    /// <param name="LegacyAppPattern">An older tool that still works but is not the one to use on this model.</param>
+    /// <param name="Files">Program files that mean the tool is installed (for tools with no Add/Remove Programs entry).</param>
+    private sealed record OemToolDef(string Vendor, string Tool, string ManufacturerPattern, string ModelPattern, string AppPattern, string[] Folders,
+        string[] StoreApps, string DownloadUrl, string? MinVersion = null, string? LegacyAppPattern = null, string? LegacyName = null, string[]? Files = null);
 
+    public const string HpBusinessModels = @"Elite|ProBook|ProDesk|ProOne|ZBook|Dragonfly|\bZ\d|\bHP Pro\b|\bmt\d{2}|\bt\d{3}\b";
+
+    private static readonly string[] DellCommandFolders = [@"Dell\UpdateService\Log", @"Dell\CommandUpdate", @"Dell\UpdateService\Service"];
+
+    /// <summary>
+    /// Which tool each make and model range should use. Dell business models (Latitude, OptiPlex, Precision, XPS, Pro,
+    /// Pro Max) use Dell Command | Update; consumer models (Inspiron, Vostro, Alienware, Dell Plus/Premium) use
+    /// SupportAssist. Lenovo Think models use Commercial Vantage (System Update is the older tool); IdeaPad, Yoga,
+    /// Legion and LOQ use Lenovo Vantage.
+    /// </summary>
     private static readonly OemToolDef[] OemTools =
     [
-        new("Dell", "Dell Command | Update", "Dell", @"Dell Command \| Update|Dell Command Update",
-            [@"Dell\UpdateService\Log", @"Dell\CommandUpdate", @"Dell\UpdateService\Service"], [],
+        new("Dell", "Dell Command | Update", "Dell", @"Latitude|OptiPlex|Precision|XPS|Rugged|Wyse|\bPro\b|Pro Max",
+            @"Dell Command \| Update|Dell Command Update", DellCommandFolders, [],
+            "https://www.dell.com/support/kbdoc/000177325/dell-command-update", MinVersion: "5.0"),
+        new("Dell", "Dell SupportAssist", "Dell", @"Inspiron|Vostro|Alienware|\bG1[5-6]\b|\bPlus\b|\bPremium\b|Dell (?:14|15|16)\b",
+            @"SupportAssist|Dell Update", [@"Dell\SARemediation", @"Dell\SupportAssist", @"SupportAssist", @"Dell\UpdateService\Log"], [],
+            "https://www.dell.com/support/assist", MinVersion: "4.0",
+            LegacyAppPattern: @"Dell Command \| Update", LegacyName: "Dell Command | Update"),
+        new("Dell", "Dell Command | Update or SupportAssist", "Dell", "",
+            @"Dell Command \| Update|Dell Command Update|SupportAssist|Dell Update", [.. DellCommandFolders, @"Dell\SARemediation", @"Dell\SupportAssist"], [],
             "https://www.dell.com/support/kbdoc/000177325/dell-command-update"),
-        new("Lenovo", "Lenovo Vantage / System Update", "Lenovo", @"Lenovo (?:Commercial )?Vantage|Lenovo System Update|Lenovo Vantage Service",
+
+        new("Lenovo", "Lenovo Commercial Vantage", "Lenovo", @"Think",
+            @"Lenovo Commercial Vantage", [@"Lenovo\Commercial Vantage", @"Lenovo\Vantage", @"Lenovo\ImController\Logs", @"Lenovo\SUHelper"],
+            ["E046963F.LenovoSettingsforEnterprise_*"],
+            "https://support.lenovo.com/solutions/hf003321",
+            LegacyAppPattern: @"Lenovo System Update|Lenovo Vantage(?! Service)", LegacyName: "Lenovo System Update or Lenovo Vantage"),
+        new("Lenovo", "Lenovo Vantage", "Lenovo", @"IdeaPad|IdeaCentre|Yoga|Legion|LOQ|\bV1[45]\b|\bV\d{2}\b",
+            @"Lenovo Vantage(?! Service)", [@"Lenovo\Vantage", @"Lenovo\ImController\Logs"], ["E046963F.LenovoCompanion_*"],
+            "https://www.lenovo.com/gb/en/software/vantage"),
+        new("Lenovo", "Lenovo Vantage / System Update", "Lenovo", "",
+            @"Lenovo (?:Commercial )?Vantage|Lenovo System Update|Lenovo Vantage Service",
             [@"Lenovo\SystemUpdate", @"Lenovo\Vantage", @"Lenovo\Commercial Vantage", @"Lenovo\ImController\Logs"],
             ["E046963F.LenovoCompanion_*", "E046963F.LenovoSettingsforEnterprise_*"],
             "https://support.lenovo.com/solutions/ht037099"),
-        new("HP", "HP Support Assistant / Image Assistant", "^HP|Hewlett", @"HP Support Assistant|HP Image Assistant|HP Support Solutions Framework",
+
+        new("HP", "HP Image Assistant", "^HP|Hewlett", HpBusinessModels, @"HP Image Assistant",
+            [@"PatchSentinel\logs\hpia", @"HP\HPIA"], [], "https://ftp.ext.hp.com/pub/caps-softpaq/cmit/HPIA.html",
+            LegacyAppPattern: @"HP Support Assistant", LegacyName: "HP Support Assistant",
+            Files: [@"%ProgramFiles%\HP\HPImageAssistant\HPImageAssistant.exe", @"C:\SWSetup\HPImageAssistant\HPImageAssistant.exe"]),
+        new("HP", "HP Support Assistant", "^HP|Hewlett", "", @"HP Support Assistant|HP Support Solutions Framework|HP Image Assistant",
             [@"HP\HP Support Framework", @"Hewlett-Packard\HP Support Framework", @"HP\HPIA"],
             ["AD2F1837.HPSupportAssistant_*", "AD2F1837.myHP_*"],
             "https://support.hp.com/gb-en/help/hp-support-assistant"),
-        new("ASUS", "MyASUS", "ASUS", @"MyASUS|ASUS System Control Interface", [@"ASUS\ASUS System Control Interface"], ["B9ECED6F.MyASUS_*"],
+        new("ASUS", "MyASUS", "ASUS", "", @"MyASUS|ASUS System Control Interface", [@"ASUS\ASUS System Control Interface"], ["B9ECED6F.MyASUS_*"],
             "https://www.asus.com/supportonly/myasus/"),
-        new("Acer", "Acer Care Center", "Acer", @"Acer Care Center|AcerCareCenter|Acer Product Registration", [@"Acer\Care Center"], ["AcerIncorporated.AcerCareCenterS_*"],
+        new("Acer", "Acer Care Center", "Acer", "", @"Acer Care Center|AcerCareCenter|Acer Product Registration", [@"Acer\Care Center"], ["AcerIncorporated.AcerCareCenterS_*"],
             "https://www.acer.com/gb-en/support"),
     ];
 
-    private static readonly OemToolDef IntelDsa = new("Intel", "Intel Driver & Support Assistant", "", @"Intel(?:\(R\)|®)? Driver (?:&|and) Support Assistant",
+    private static readonly OemToolDef IntelDsa = new("Intel", "Intel Driver & Support Assistant", "", "", @"Intel(?:\(R\)|®)? Driver (?:&|and) Support Assistant",
         [@"Intel\Driver and Support Assistant", @"Intel\DSA"], [], "https://www.intel.com/content/www/us/en/support/detect.html");
 
     public static async Task<DeviceInfo> CollectAsync(IReadOnlyList<InstalledItem> inventory, bool lookupPublicIp, DateOnly today, CancellationToken ct)
@@ -166,16 +202,43 @@ $r | ConvertTo-Json -Depth 6 -Compress
 
     // ---------------- manufacturer tools ----------------
 
-    private static List<OemToolStatus> DetectOemTools(DeviceInfo info, IReadOnlyList<InstalledItem> inventory)
+    public static List<OemToolStatus> DetectOemTools(DeviceInfo info, IReadOnlyList<InstalledItem> inventory)
     {
         var list = new List<OemToolStatus>();
         var maker = info.Manufacturer ?? "";
-        foreach (var def in OemTools)
+        var model = BuildActions.ModelText(info);
+        foreach (var vendor in OemTools.GroupBy(d => d.Vendor))
         {
-            var applicable = Regex.IsMatch(maker, def.ManufacturerPattern, RegexOptions.IgnoreCase);
+            var applicable = Regex.IsMatch(maker, vendor.First().ManufacturerPattern, RegexOptions.IgnoreCase);
+            // The tool for this model range, else the make's fallback.
+            var def = vendor.FirstOrDefault(d => d.ModelPattern.Length > 0 && Regex.IsMatch(model, d.ModelPattern, RegexOptions.IgnoreCase))
+                      ?? vendor.FirstOrDefault(d => d.ModelPattern.Length == 0) ?? vendor.First();
             var status = Detect(def, inventory);
-            if (applicable || status.Installed) { status.Applicable = applicable; list.Add(status); }
+            if (!applicable && !status.Installed)
+            {
+                // A different make's tool left on the device (e.g. an imaged PC): report it if any of its tools is installed.
+                var any = vendor.Select(d => Detect(d, inventory)).FirstOrDefault(t => t.Installed);
+                if (any is null) continue;
+                status = any;
+            }
+            status.Applicable = applicable;
+            if (def.LegacyAppPattern is { } legacy)
+            {
+                var rx = new Regex(legacy, RegexOptions.IgnoreCase);
+                status.LegacyInstalled = inventory.FirstOrDefault(i => i.Source == ItemSource.Registry && rx.IsMatch(i.Name))?.Name;
+                status.LegacyName = def.LegacyName;
+            }
+            list.Add(status);
         }
+        // Surface (and other Microsoft hardware) gets drivers and firmware through Windows Update.
+        if (Regex.IsMatch(maker, "^Microsoft", RegexOptions.IgnoreCase) && Regex.IsMatch(model, "Surface", RegexOptions.IgnoreCase))
+            list.Add(new OemToolStatus
+            {
+                Vendor = "Microsoft", Tool = "Windows Update", Applicable = true, Installed = true, BuiltIn = true,
+                InstalledName = "Windows Update (Surface drivers and firmware)",
+                DownloadUrl = "https://support.microsoft.com/surface/download-drivers-and-firmware-for-surface",
+            });
+
         var intel = Detect(IntelDsa, inventory);
         intel.Applicable = info.CpuName?.Contains("Intel", StringComparison.OrdinalIgnoreCase) == true;
         if (intel.Applicable || intel.Installed) list.Add(intel);
@@ -187,14 +250,22 @@ $r | ConvertTo-Json -Depth 6 -Compress
         var rx = new Regex(def.AppPattern, RegexOptions.IgnoreCase);
         var app = inventory.FirstOrDefault(i => i.Source == ItemSource.Registry && rx.IsMatch(i.Name));
         var storeApp = def.StoreApps.Length > 0 ? FindStoreApp(def.StoreApps) : null;
+        var file = def.Files?.Select(BuildActions.Expand).FirstOrDefault(File.Exists);
+        if (app is null && storeApp is null && file is not null)
+        {
+            string? ver = null;
+            try { ver = System.Diagnostics.FileVersionInfo.GetVersionInfo(file).ProductVersion; } catch { /* ignore */ }
+            app = new InstalledItem { Name = def.Tool, Version = ver };
+        }
         var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         return new OemToolStatus
         {
             Vendor = def.Vendor,
             Tool = def.Tool,
             Installed = app is not null || storeApp is not null,
-            InstalledName = app?.Name ?? storeApp,
-            InstalledVersion = app?.Version,
+            InstalledName = storeApp ?? app?.Name,
+            InstalledVersion = storeApp is null ? app?.Version : null,
+            MinVersion = def.MinVersion,
             LastActivity = NewestWrite(def.Folders.Select(f => Path.Combine(programData, f))),
             DownloadUrl = def.DownloadUrl,
         };

@@ -640,3 +640,85 @@ public class BuildActionTests
         Assert.Equal(["2. B"], h.Outstanding);
     }
 }
+
+public class OemToolTests
+{
+    private static List<InstalledItem> Apps(params (string Name, string Version)[] apps) =>
+        apps.Select(a => new InstalledItem { Name = a.Name, Version = a.Version, Source = ItemSource.Registry }).ToList();
+
+    [Fact]
+    public void ThinkPad_expects_Commercial_Vantage_and_flags_System_Update_as_older()
+    {
+        var d = new Device.DeviceInfo { Manufacturer = "LENOVO", Model = "21C3001UUK", ProductName = "ThinkPad L15 Gen 3" };
+        var t = Device.DeviceCollector.DetectOemTools(d, Apps(("Lenovo System Update", "5.08.04.85"))).Single(x => x.Vendor == "Lenovo");
+        Assert.Equal("Lenovo Commercial Vantage", t.Tool);
+        Assert.False(t.Installed);
+        Assert.Equal("Lenovo System Update", t.LegacyInstalled);
+
+        d.OemTools = [t];
+        var rule = new Device.BuildCheckRule { Id = "oem", Type = "builtin", Check = "oemTools" };
+        var r = Device.BuildChecklist.Evaluate([rule], d, [], new DateOnly(2026, 11, 6)).Single();
+        Assert.Equal(Device.CheckStatus.Warn, r.Status);
+        Assert.Contains("Commercial Vantage is the tool for this model", r.Detail);
+    }
+
+    [Fact]
+    public void Dell_business_and_consumer_models_get_different_tools()
+    {
+        var latitude = new Device.DeviceInfo { Manufacturer = "Dell Inc.", Model = "Latitude 5550" };
+        var inspiron = new Device.DeviceInfo { Manufacturer = "Dell Inc.", Model = "Inspiron 15 3530" };
+        Assert.Equal("Dell Command | Update", Device.DeviceCollector.DetectOemTools(latitude, []).Single(x => x.Vendor == "Dell").Tool);
+        Assert.Equal("Dell SupportAssist", Device.DeviceCollector.DetectOemTools(inspiron, []).Single(x => x.Vendor == "Dell").Tool);
+    }
+
+    [Fact]
+    public void Old_Dell_Command_Update_is_flagged_and_offered_an_update()
+    {
+        var d = new Device.DeviceInfo { Manufacturer = "Dell Inc.", Model = "OptiPlex 7090" };
+        var apps = Apps(("Dell Command | Update for Windows Universal", "4.3.0"));
+        d.OemTools = Device.DeviceCollector.DetectOemTools(d, apps);
+        var tool = d.OemTools.Single(x => x.Vendor == "Dell");
+        tool.LastActivity = DateTimeOffset.Now;
+        var catalog = Rules.RuleCatalogLoader.LoadEmbedded();
+        var rule = catalog.BuildChecklist.Single(r => r.Id == "oem-tool");
+        var r = Device.BuildChecklist.Evaluate([rule], d, apps, DateOnly.FromDateTime(DateTime.Now), catalog.Links).Single();
+        Assert.Equal(Device.CheckStatus.Warn, r.Status);
+        var ids = r.Actions.Select(a => a.Id).ToList();
+        Assert.Contains("update-dcu", ids);
+        Assert.False(ids.Contains("install-dcu"));
+        Assert.False(ids.Any(i => i.Contains("cv") || i.Contains("sa")));
+    }
+}
+
+public class HpAndSurfaceToolTests
+{
+    [Fact]
+    public void HP_business_uses_Image_Assistant_and_consumer_uses_Support_Assistant()
+    {
+        var elite = new Device.DeviceInfo { Manufacturer = "HP", Model = "HP EliteBook 840 G10 Notebook PC" };
+        var pavilion = new Device.DeviceInfo { Manufacturer = "HP", Model = "HP Pavilion Laptop 15-eg3xxx" };
+        Assert.Equal("HP Image Assistant", Device.DeviceCollector.DetectOemTools(elite, []).Single(x => x.Vendor == "HP").Tool);
+        Assert.Equal("HP Support Assistant", Device.DeviceCollector.DetectOemTools(pavilion, []).Single(x => x.Vendor == "HP").Tool);
+
+        var catalog = Rules.RuleCatalogLoader.LoadEmbedded();
+        var rule = catalog.BuildChecklist.Single(r => r.Id == "oem-tool");
+        elite.OemTools = Device.DeviceCollector.DetectOemTools(elite, []);
+        var r = Device.BuildChecklist.Evaluate([rule], elite, [], new DateOnly(2026, 11, 6), catalog.Links).Single();
+        Assert.Equal(Device.CheckStatus.Fail, r.Status);
+        var install = r.Actions.Single(a => a.Id == "install-hpia");
+        Assert.Equal("HP.ImageAssistant", install.Target);
+        Assert.False(r.Actions.Any(a => a.Id.Contains("hpsa") || a.Id.Contains("dcu") || a.Id.Contains("cv")));
+        Assert.True(catalog.BuildChecklist.SelectMany(x => x.Actions).Where(a => a.WingetLocation is not null).All(a => a.WingetLocation!.StartsWith("%ProgramFiles%")));
+    }
+
+    [Fact]
+    public void Surface_needs_no_manufacturer_tool()
+    {
+        var d = new Device.DeviceInfo { Manufacturer = "Microsoft Corporation", Model = "Surface Laptop 7" };
+        d.OemTools = Device.DeviceCollector.DetectOemTools(d, []);
+        var rule = new Device.BuildCheckRule { Id = "oem", Type = "builtin", Check = "oemTools" };
+        var r = Device.BuildChecklist.Evaluate([rule], d, [], new DateOnly(2026, 11, 6)).Single();
+        Assert.Equal(Device.CheckStatus.Pass, r.Status);
+        Assert.Contains("Windows Update", r.Detail);
+    }
+}

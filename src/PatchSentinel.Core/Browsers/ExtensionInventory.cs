@@ -38,7 +38,9 @@ public static class ExtensionInventory
     public static List<BrowserExtension> Collect(bool allUsers, List<string> warnings)
     {
         var list = new List<BrowserExtension>();
-        foreach (var (user, home) in Profiles(allUsers))
+        var profiles = Profiles(allUsers).ToList();
+        var browsersSeen = 0;
+        foreach (var (user, home) in profiles)
         {
             var local = Path.Combine(home, "AppData", "Local");
             var roaming = Path.Combine(home, "AppData", "Roaming");
@@ -46,17 +48,23 @@ public static class ExtensionInventory
             {
                 var userData = Path.Combine(local, rel);
                 if (!Directory.Exists(userData)) continue;
+                browsersSeen++;
                 try { list.AddRange(ReadChromium(browser, user, userData)); }
                 catch (Exception ex) { warnings.Add($"Could not read {browser} extensions for {user}: {ex.Message}"); }
             }
             var ff = Path.Combine(roaming, "Mozilla", "Firefox", "Profiles");
             if (Directory.Exists(ff))
             {
+                browsersSeen++;
                 try { list.AddRange(ReadFirefox(user, ff)); }
                 catch (Exception ex) { warnings.Add($"Could not read Firefox add-ons for {user}: {ex.Message}"); }
             }
         }
         MarkPolicyBlocked(list);
+        if (list.Count == 0)
+            warnings.Add(profiles.Count == 0
+                ? "No user profiles were found to check for browser extensions."
+                : $"No browser extensions were found in {profiles.Count} user profile(s) ({string.Join(", ", profiles.Select(p => p.User))}); {browsersSeen} browser profile folder(s) were checked.");
         return list;
     }
 
@@ -67,15 +75,58 @@ public static class ExtensionInventory
             yield return (Environment.UserName, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
             yield break;
         }
-        var root = Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments)) ?? @"C:\Users";
-        string[] dirs;
-        try { dirs = Directory.GetDirectories(root); } catch { yield break; }
-        foreach (var d in dirs)
+        foreach (var p in UserProfileFolders()) yield return (Path.GetFileName(p), p);
+    }
+
+    /// <summary>
+    /// Every real user profile folder on the PC. Read from the ProfileList key (covers profiles outside C:\Users),
+    /// plus the folders in the Users directory as a fallback.
+    /// </summary>
+    public static List<string> UserProfileFolders()
+    {
+        var found = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string? dir)
         {
-            var name = Path.GetFileName(d);
-            if (name is "Public" or "Default" or "Default User" or "All Users" || name.StartsWith("defaultuser", StringComparison.OrdinalIgnoreCase)) continue;
-            yield return (name, d);
+            if (string.IsNullOrWhiteSpace(dir)) return;
+            dir = Environment.ExpandEnvironmentVariables(dir).TrimEnd('\\', '/');
+            var name = Path.GetFileName(dir);
+            if (name.Length == 0 || name is "Public" or "Default" or "Default User" or "All Users"
+                || name.StartsWith("defaultuser", StringComparison.OrdinalIgnoreCase)) return;
+            if (!Directory.Exists(Path.Combine(dir, "AppData"))) return;
+            if (seen.Add(dir)) found.Add(dir);
         }
+
+        string? usersRoot = null;
+        try
+        {
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var list = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList");
+            if (list is not null)
+            {
+                usersRoot = list.GetValue("ProfilesDirectory") as string;
+                foreach (var sid in list.GetSubKeyNames())
+                {
+                    // Only real accounts: local, domain and Entra ID users (not SYSTEM, LocalService, NetworkService).
+                    if (!(sid.StartsWith("S-1-5-21-", StringComparison.Ordinal) || sid.StartsWith("S-1-12-1-", StringComparison.Ordinal))) continue;
+                    using var k = list.OpenSubKey(sid);
+                    Add(k?.GetValue("ProfileImagePath") as string);
+                }
+            }
+        }
+        catch { /* fall back to the folder listing */ }
+
+        // C:\Users\Public\Documents -> C:\Users
+        usersRoot = string.IsNullOrWhiteSpace(usersRoot)
+            ? Path.GetDirectoryName(Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments)))
+            : Environment.ExpandEnvironmentVariables(usersRoot);
+        try
+        {
+            if (!string.IsNullOrEmpty(usersRoot) && Directory.Exists(usersRoot))
+                foreach (var d in Directory.GetDirectories(usersRoot)) Add(d);
+        }
+        catch { /* ignore */ }
+        return found;
     }
 
     // ---------------- Chromium ----------------

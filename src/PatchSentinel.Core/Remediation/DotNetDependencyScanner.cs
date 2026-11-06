@@ -20,13 +20,8 @@ public static class DotNetDependencyScanner
         };
         if (allUsers)
         {
-            var usersRoot = Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments)) ?? @"C:\Users";
-            try
-            {
-                foreach (var profile in Directory.GetDirectories(usersRoot))
-                    roots.Add(Path.Combine(profile, "AppData", "Local", "Programs"));
-            }
-            catch { /* ignore */ }
+            foreach (var profile in Browsers.ExtensionInventory.UserProfileFolders())
+                roots.Add(Path.Combine(profile, "AppData", "Local", "Programs"));
         }
         else
         {

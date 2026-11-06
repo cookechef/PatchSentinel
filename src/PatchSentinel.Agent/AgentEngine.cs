@@ -224,6 +224,8 @@ internal sealed class AgentEngine
     private DateTimeOffset? NextScanAt(DateTimeOffset now)
     {
         if (_state.LastScanAt is null) return _startedAt.AddMinutes(2); // let the machine settle after boot
+        if (_lastScan is not null && _lastScan.AgentVersion != AppPaths.Version && _lastScan.ScannedAt < _startedAt)
+            return _startedAt.AddMinutes(2); // results from before an upgrade: refresh them with the new version
         return _state.LastScanAt.Value.AddHours(Math.Max(1, _settings.Settings.ScanIntervalHours));
     }
 
@@ -502,6 +504,9 @@ internal sealed class AgentEngine
                 {
                     List<InstalledItem> inv;
                     lock (_gate) inv = _lastScan?.Inventory.Where(i => i.Source == ItemSource.Registry).ToList() ?? [];
+                    // Classify now with the current catalogue, so an older scan or a just-updated catalogue still shows categories.
+                    var catalog = Core.Rules.RuleCatalogLoader.Load(AppPaths.RulesDir, []);
+                    inv = new Core.Rules.SoftwareClassifier(catalog.Categories).Apply(inv);
                     return Task.FromResult(PipeResponse.Success(inv));
                 }
 

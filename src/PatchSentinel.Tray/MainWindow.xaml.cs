@@ -518,6 +518,8 @@ public partial class MainWindow : Window
         {
             if (_tray.AgentReachable)
                 _inventory = await _tray.Client.GetAsync<List<InstalledItem>>(Commands.GetInventory, timeout: TimeSpan.FromSeconds(30)) ?? new List<InstalledItem>();
+            if (_inventory.Count > 0 && _inventory.All(i => i.Classification is null))
+                _inventory = await Task.Run(() => ClassifyLocally(_inventory)); // agent's results pre-date categories
             if (_inventory.Count == 0)
             {
                 // Agent not running or no scan yet: read this user's view of the registry directly.

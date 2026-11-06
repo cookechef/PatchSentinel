@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.06",
+  "catalogVersion": "2026.11.06.2",
   "rules": [
     {
       "id": "dotnet-runtime",
@@ -858,7 +858,22 @@
         "N-able Take Control",
         "MeshAgent",
         "MeshCentral",
-        "Quick Assist"
+        "Quick Assist",
+        "AnyViewer",
+        "AweSun",
+        "Aweray",
+        "ToDesk",
+        "Sunlogin",
+        "UltraViewer",
+        "Ninja ?Remote",
+        "Atera Splashtop",
+        "Jump Desktop",
+        "Remote Desktop Manager",
+        "RDCMan",
+        "mRemoteNG",
+        "Royal TS",
+        "Xpra",
+        "Ivanti Remote Control"
       ]
     },
     {
@@ -1038,7 +1053,18 @@
         "Automox",
         "Immybot",
         "SuperOps",
-        "PatchSentinel"
+        "PatchSentinel",
+        "ConnectWise Manage Client",
+        "Atera Networks",
+        "SimpleHelp",
+        "Splashtop Streamer",
+        "NinjaOne Agent",
+        "N-able Windows Agent",
+        "Tanium",
+        "Hexnode",
+        "Kandji",
+        "Mosyle",
+        "JumpCloud"
       ]
     },
     {
@@ -1075,7 +1101,23 @@
         "ThreatLocker",
         "Heimdal",
         "Avira",
-        "Panda (?:Dome|Free Antivirus|Endpoint)"
+        "Panda (?:Dome|Free Antivirus|Endpoint)",
+        "CyberSmart",
+        "Avast One",
+        "AVG One",
+        "Norton One",
+        "Defender for Business",
+        "Mimecast",
+        "Proofpoint",
+        "DNSFilter",
+        "Cisco Umbrella",
+        "Webroot SecureAnywhere",
+        "Acronis Cyber Protect",
+        "Bitdefender Endpoint",
+        "Arctic Wolf",
+        "Blackpoint",
+        "Todyl",
+        "Guardz"
       ]
     },
     {
@@ -1165,7 +1207,7 @@
     },
     {
       "id": "business-vpn",
-      "category": "VPN client",
+      "category": "VPN / secure access client",
       "concern": "Info",
       "purpose": "Connects this device to a company or remote network.",
       "advisory": "VPN clients are a frequent target for attackers and vendors regularly publish critical fixes, so keep them on the latest version and make sure the connection uses MFA.",
@@ -1189,7 +1231,75 @@
         "NetBird",
         "Shrew Soft VPN",
         "TheGreenBow",
-        "NCP Secure"
+        "NCP Secure",
+        "Cloudflare One",
+        "Cloudflare WARP",
+        "Check Point SASE",
+        "Harmony SASE",
+        "Perimeter 81",
+        "Netskope Client",
+        "Cato Client",
+        "Twingate",
+        "Banyan",
+        "Prisma Access",
+        "Forcepoint One"
+      ]
+    },
+    {
+      "id": "admin-tools",
+      "category": "System / admin utility",
+      "concern": "Info",
+      "purpose": "Package managers, uninstallers, disk partitioning and other technician tools.",
+      "advisory": "Useful for IT staff. Tools that change disks or bulk-remove software are best kept off general user devices.",
+      "patterns": [
+        "Chocolatey",
+        "Scoop",
+        "BCUninstaller",
+        "Bulk Crap Uninstaller",
+        "Revo Uninstaller",
+        "Geek Uninstaller",
+        "AOMEI Partition Assistant",
+        "AOMEI Backupper",
+        "MiniTool Partition Wizard",
+        "EaseUS Partition Master",
+        "EaseUS Todo Backup",
+        "Macrium Reflect",
+        "Rufus",
+        "Ventoy",
+        "Sysinternals",
+        "Process Explorer",
+        "Process Monitor",
+        "Autoruns",
+        "PowerToys",
+        "TreeSize",
+        "WizTree",
+        "WinDirStat",
+        "CPU-Z",
+        "HWiNFO",
+        "CrystalDiskInfo",
+        "Speccy",
+        "Belarc Advisor"
+      ]
+    },
+    {
+      "id": "ai-assistant",
+      "category": "AI assistant",
+      "concern": "Info",
+      "purpose": "Generative AI chat or assistant app.",
+      "advisory": "Check it is an approved service and that staff know not to paste confidential or personal data into tools that are not covered by a business agreement.",
+      "patterns": [
+        "Copilot",
+        "ChatGPT",
+        "Perplexity",
+        "Ollama",
+        "LM Studio",
+        "GPT4All",
+        "Claude Desktop",
+        "Claude for Windows",
+        "Google Gemini"
+      ],
+      "excludePatterns": [
+        "GitHub Copilot for"
       ]
     }
   ]

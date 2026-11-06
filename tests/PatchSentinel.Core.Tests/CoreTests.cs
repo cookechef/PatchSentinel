@@ -343,3 +343,19 @@ public class SoftwareClassifierTests
         Assert.Equal("messaging", c.Classify(App("Zoom Workplace"))!.Id);
     }
 }
+
+public class SoftwareClassifierMoreTests
+{
+    [Fact]
+    public void Apps_seen_in_the_field_are_categorised()
+    {
+        var c = new SoftwareClassifier(RuleCatalogLoader.LoadEmbedded().Categories);
+        InstalledItem App(string n) => new() { Name = n, Source = ItemSource.Registry };
+        Assert.Equal("remote-access", c.Classify(App("AnyViewer 5.8.0"))!.Id);
+        Assert.Equal("business-vpn", c.Classify(App("Cloudflare One Client"))!.Id);
+        Assert.Equal("business-vpn", c.Classify(App("Check Point SASE"))!.Id);
+        Assert.Equal("security", c.Classify(App("CyberSmart Active Protect"))!.Id);
+        Assert.Equal("admin-tools", c.Classify(App("Chocolatey (Install Only)"))!.Id);
+        Assert.Equal("rmm-agent", c.Classify(App("Action1 Agent"))!.Id);
+    }
+}

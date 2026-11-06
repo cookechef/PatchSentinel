@@ -10,6 +10,8 @@ public sealed class RuleCatalog
     public List<SoftwareCategoryRule> Categories { get; set; } = [];
     /// <summary>Device build checklist (Device tab). Edit it on GitHub to match your build process.</summary>
     public List<Device.BuildCheckRule> BuildChecklist { get; set; } = [];
+    /// <summary>Named portal links used by checklist buttons (atera, bitdefender, sentinelone, itglue...). Override them in eol-rules.local.json.</summary>
+    public Dictionary<string, string> Links { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public enum Concern { Info, Review, High }

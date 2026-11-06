@@ -70,15 +70,32 @@ public sealed class AppRow : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
+public sealed record ChecklistActionItem(Core.Device.BuildCheckResult Check, Core.Device.BuildActionView Action)
+{
+    public string Label => Action.Label;
+    public string Tooltip => Action.Description ?? Action.Kind switch
+    {
+        "winget" => $"Installs {Action.Target} with winget (as administrator)",
+        "run" => "Runs as administrator in the background; the checklist refreshes when it finishes",
+        "url" => Action.Target ?? "",
+        _ => Action.Label,
+    };
+}
+
 public sealed class ChecklistRow
 {
     public Core.Device.BuildCheckResult Result { get; init; } = new();
+    public List<ChecklistActionItem> ActionItems => Result.Actions.Select(a => new ChecklistActionItem(Result, a)).ToList();
+    public string ActionsText => string.Join(", ", Result.Actions.Select(a => a.Label));
+    public string SignoffText => Result.Signoff?.Text ?? "";
+    public Visibility SignedVisibility => Result.Signoff is null ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility UnsignedVisibility => Result.Signoff is null ? Visibility.Visible : Visibility.Collapsed;
     public int Step => Result.Step;
     public string Title => Result.Title;
     public string Status => Result.Status.ToString();
     public string StatusLabel => Core.Reporting.DeviceReport.StatusText(Result.Status);
     public string Detail => Result.Detail;
-    public string CopyText => $"{Step}. {Title} - {StatusLabel}: {Detail}";
+    public string CopyText => $"{Step}. {Title} - {StatusLabel}: {Detail}{(Result.Signoff is { } so ? $" ({so.Text})" : "")}";
 }
 
 public sealed class HistoryRow
@@ -152,9 +169,16 @@ public sealed class UpdateRow : INotifyPropertyChanged
     private void OnChanged([CallerMemberName] string? p = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
 }
 
-public sealed class ExtRow
+public sealed class ExtRow : INotifyPropertyChanged
 {
+    private bool _selected;
     public Core.Browsers.BrowserExtension Ext { get; init; } = new();
+    public bool Selected
+    {
+        get => _selected;
+        set { if (_selected == value) return; _selected = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Selected))); }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
     public string Status => Ext.StatusText;
     public string Concern => Ext.Concern.ToString();
     public bool IsUpToDate => Ext.Status == Core.Browsers.ExtensionStatus.UpToDate && Ext.Concern == Core.Rules.Concern.Info;
@@ -577,8 +601,14 @@ public partial class MainWindow : Window
         var fail = checks.Count(c => c.Status == Core.Device.CheckStatus.Fail);
         var warn = checks.Count(c => c.Status == Core.Device.CheckStatus.Warn);
         var pass = checks.Count(c => c.Status == Core.Device.CheckStatus.Pass);
+        var signed = checks.Count(c => c.Signoff is not null);
+        var outstanding = checks.Count(c => !Core.Device.BuildSignoffStore.IsDone(c));
         ChecklistSummary.Text = checks.Count == 0 ? "No checklist in the rules catalogue."
-            : $"{pass} OK, {fail} need action, {warn} to check, {checks.Count(c => c.Status is Core.Device.CheckStatus.Manual)} to confirm by hand. Steps follow your device build sheet.";
+            : $"{pass} OK, {fail} need action, {warn} to check, {checks.Count(c => c.Status is Core.Device.CheckStatus.Manual)} to confirm by hand, {signed} signed off. {outstanding} outstanding. Steps follow your device build sheet.";
+        HandoverText.Text = _scan.BuildHandover is { } h
+            ? h.Text + (h.Outstanding.Count > 0 ? $". Outstanding then: {string.Join("; ", h.Outstanding)}" : "")
+            : "Use the buttons on each step to fix it, or click Checked / Not required once you have dealt with it. Every sign-off is logged with your name for auditing. Click Sign off build when the device is ready to hand over.";
+        HandoverText.Foreground = (System.Windows.Media.Brush)FindResource(_scan.BuildHandover is null ? "Muted" : _scan.BuildHandover.StepsOutstanding == 0 ? "OkText" : "Warning");
 
         foreach (var group in Core.Reporting.DeviceReport.Rows(d).GroupBy(r => r.Section))
         {
@@ -930,6 +960,61 @@ public partial class MainWindow : Window
 
     private List<ExtRow> SelectedExtRows() => ExtGrid.SelectedItems.OfType<ExtRow>().ToList();
 
+    /// <summary>Ticked rows, or the selected rows if nothing is ticked.</summary>
+    private List<ExtRow> TargetExtRows()
+    {
+        var ticked = _extRows.Where(r => r.Selected).ToList();
+        return ticked.Count > 0 ? ticked : SelectedExtRows();
+    }
+
+    private void ExtTickAll_Click(object sender, RoutedEventArgs e) { foreach (var r in _extRows) r.Selected = true; }
+
+    private void ExtUntickAll_Click(object sender, RoutedEventArgs e) { foreach (var r in _extRows) r.Selected = false; }
+
+    private async void UninstallExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync("uninstall");
+
+    private void OpenExtensionInBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        var rows = TargetExtRows();
+        if (rows.Count == 0) { MessageBox.Show(this, "Select or tick an extension first.", "Open in browser"); return; }
+        var skipped = 0;
+        foreach (var r in rows.Take(10))
+        {
+            var x = r.Ext;
+            if (!x.UserName.Equals(Environment.UserName, StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
+            var (exe, url) = x.Browser switch
+            {
+                Core.Browsers.Browser.Chrome => (FindBrowser(@"Google\Chrome\Application\chrome.exe"), $"chrome://extensions/?id={x.Id}"),
+                Core.Browsers.Browser.Edge => (FindBrowser(@"Microsoft\Edge\Application\msedge.exe"), $"edge://extensions/?id={x.Id}"),
+                Core.Browsers.Browser.Brave => (FindBrowser(@"BraveSoftware\Brave-Browser\Application\brave.exe"), $"brave://extensions/?id={x.Id}"),
+                _ => (FindBrowser(@"Mozilla Firefox\firefox.exe"), "about:addons"),
+            };
+            if (exe is null) { skipped++; continue; }
+            var profileArg = x.Browser == Core.Browsers.Browser.Firefox ? "" : $"--profile-directory=\"{Path.GetFileName(x.ProfilePath)}\" ";
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, $"{profileArg}\"{url}\"") { UseShellExecute = false }); }
+            catch { skipped++; }
+        }
+        StatusBarText.Text = skipped == 0
+            ? "Opened in the browser. Use Update (turn on Developer mode) or Remove on the extension's page."
+            : $"{skipped} extension(s) could not be opened here: they belong to another user, or the browser was not found. Use Uninstall ticked instead.";
+    }
+
+    private static string? FindBrowser(string relative)
+    {
+        foreach (var root in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                 })
+        {
+            if (string.IsNullOrEmpty(root)) continue;
+            var p = Path.Combine(root, relative);
+            if (File.Exists(p)) return p;
+        }
+        return null;
+    }
+
     private void ExtGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (ExtGrid.SelectedItem is ExtRow r)
@@ -955,21 +1040,26 @@ public partial class MainWindow : Window
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{r.Ext.ProfilePath}\"") { UseShellExecute = true });
     }
 
-    private async void BlockExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync(unblock: false);
+    private async void BlockExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync("block");
 
-    private async void UnblockExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync(unblock: true);
+    private async void UnblockExtensions_Click(object sender, RoutedEventArgs e) => await ChangeExtensionPolicyAsync("unblock");
 
-    private async Task ChangeExtensionPolicyAsync(bool unblock)
+    private async Task ChangeExtensionPolicyAsync(string action)
     {
-        var rows = SelectedExtRows().GroupBy(r => (r.Ext.Browser, r.Ext.Id)).Select(g => g.First()).ToList();
-        if (rows.Count == 0) { MessageBox.Show(this, "Select the extension(s) first.", "Browser extensions"); return; }
-        if (!unblock && MessageBox.Show(this,
-                $"Block these extension(s) for every user on this PC?{Environment.NewLine}{Environment.NewLine}" +
-                string.Join(Environment.NewLine, rows.Select(r => $"  - {r.Name} ({r.Browser})")) +
-                $"{Environment.NewLine}{Environment.NewLine}This adds them to the browser's blocklist policy. When the browser next starts Chrome, Edge and Brave turn them off for good and Firefox uninstalls them. They can't be reinstalled until unblocked.",
+        var rows = (action == "unblock" ? SelectedExtRows() : TargetExtRows()).GroupBy(r => (r.Ext.Browser, r.Ext.Id)).Select(g => g.First()).ToList();
+        if (rows.Count == 0) { MessageBox.Show(this, "Tick or select the extension(s) first.", "Browser extensions"); return; }
+        var list = string.Join(Environment.NewLine, rows.Take(25).Select(r => $"  - {r.Name} ({r.Browser})")) + (rows.Count > 25 ? $"{Environment.NewLine}  ...and {rows.Count - 25} more" : "");
+        if (action == "uninstall" && MessageBox.Show(this,
+                $"Uninstall these {rows.Count} extension(s) for every user on this PC?{Environment.NewLine}{Environment.NewLine}{list}{Environment.NewLine}{Environment.NewLine}" +
+                "The browser removes them when it next starts (ask the user to close and reopen it). Their extension data is deleted. " +
+                "Once they have gone PatchSentinel takes the policy off again, so they can be reinstalled later if needed.",
+                "Uninstall extensions", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+        if (action == "block" && MessageBox.Show(this,
+                $"Block these {rows.Count} extension(s) for every user on this PC?{Environment.NewLine}{Environment.NewLine}{list}{Environment.NewLine}{Environment.NewLine}" +
+                "When the browser next starts Chrome, Edge and Brave turn them off for good and Firefox uninstalls them. They can't be reinstalled until unblocked.",
                 "Block extensions", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
 
-        ExtBlockButton.IsEnabled = false;
+        ExtBlockButton.IsEnabled = ExtUninstallButton.IsEnabled = false;
         var lines = new List<string>();
         var ok = true;
         try
@@ -978,19 +1068,19 @@ public partial class MainWindow : Window
             {
                 foreach (var r in rows)
                 {
-                    var res = await _tray.Client.SendAsync(Commands.BlockExtension, new BlockExtensionRequest(r.Ext.Browser, r.Id, r.Name, unblock));
+                    var res = await _tray.Client.SendAsync(Commands.ExtensionAction, new ExtensionActionRequest(r.Ext.Browser, r.Id, r.Name, action));
                     ok &= res.Ok;
-                    lines.Add(res.Ok ? res.As<string>() ?? "Done." : $"{r.Name}: {res.Error}");
+                    lines.Add(res.Ok ? res.As<string>() ?? $"{r.Name}: done." : $"{r.Name}: {res.Error}");
                 }
             }
             else
             {
-                // No agent: run the CLI elevated, once per browser.
+                if (action == "uninstall") { MessageBox.Show(this, "The PatchSentinel agent is not running. Uninstall needs the agent, so that it can tidy up the policy afterwards.", "Browser extensions"); return; }
                 var exe = Path.Combine(AppContext.BaseDirectory, "psentinel.exe");
                 if (!File.Exists(exe)) { MessageBox.Show(this, "psentinel.exe was not found next to the tray app.", "Browser extensions"); return; }
                 foreach (var g in rows.GroupBy(r => r.Ext.Browser))
                 {
-                    var args = $"extensions {(unblock ? "unblock" : "block")} --browser {g.Key}" + string.Concat(g.Select(r => $" --id \"{r.Id}\""));
+                    var args = $"extensions {action} --browser {g.Key}" + string.Concat(g.Select(r => $" --id \"{r.Id}\""));
                     using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, args)
                     {
                         UseShellExecute = true, Verb = "runas", WindowStyle = System.Diagnostics.ProcessWindowStyle.Minimized,
@@ -998,22 +1088,27 @@ public partial class MainWindow : Window
                     if (p is null) continue;
                     await p.WaitForExitAsync();
                     ok &= p.ExitCode == 0;
-                    lines.Add($"{g.Key}: {(p.ExitCode == 0 ? (unblock ? "unblocked" : "blocked") : "failed")} {string.Join(", ", g.Select(r => r.Name))}");
+                    lines.Add($"{g.Key}: {(p.ExitCode == 0 ? action + "ed" : "failed")} {string.Join(", ", g.Select(r => r.Name))}");
                 }
             }
         }
         catch (System.ComponentModel.Win32Exception) { lines.Add("Administrator approval was cancelled."); ok = false; }
         catch (Exception ex) { lines.Add(ex.Message); ok = false; }
-        finally { ExtBlockButton.IsEnabled = true; }
+        finally { ExtBlockButton.IsEnabled = ExtUninstallButton.IsEnabled = true; }
 
-        if (!unblock && ok) lines.Add("Ask the user to close and reopen the browser so it takes effect.");
-        MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Browser extensions", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
-        foreach (var r in rows)
-            foreach (var x in (_scan?.Extensions ?? []).Where(x => x.Browser == r.Ext.Browser && x.Id == r.Id))
-                if (ok)
+        if (action != "unblock" && ok) lines.Add("Ask the user to close and reopen the browser so it takes effect.");
+        var shown = lines.Count > 20 ? lines.Take(20).Append($"...and {lines.Count - 20} more (see History)").ToList() : lines;
+        MessageBox.Show(this, string.Join(Environment.NewLine, shown), "Browser extensions", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        if (ok)
+            foreach (var r in rows)
+                foreach (var x in (_scan?.Extensions ?? []).Where(x => x.Browser == r.Ext.Browser && x.Id == r.Id))
                 {
-                    x.BlockedByPolicy = !unblock;
-                    if (!unblock) { x.Concern = Core.Rules.Concern.Info; if (!x.Advice.StartsWith("Blocked", StringComparison.Ordinal)) x.Advice = "Blocked by policy: the browser turns it off (Firefox uninstalls it) at the next start and it can't be turned back on. " + x.Advice; }
+                    switch (action)
+                    {
+                        case "uninstall": x.PendingRemoval = true; x.Concern = Core.Rules.Concern.Info; break;
+                        case "block": x.BlockedByPolicy = true; x.Concern = Core.Rules.Concern.Info; break;
+                        default: x.BlockedByPolicy = false; x.PendingRemoval = false; break;
+                    }
                 }
         RenderExtensions();
         await LoadHistoryAsync();
@@ -1042,6 +1137,143 @@ public partial class MainWindow : Window
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
+    }
+
+
+    // ---------------- build checklist actions and sign-off ----------------
+
+    private void BuildAction_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ChecklistActionItem item) _ = RunBuildActionAsync(item);
+    }
+
+    private async Task RunBuildActionAsync(ChecklistActionItem item)
+    {
+        var a = item.Action;
+        try
+        {
+            switch (a.Kind)
+            {
+                case "url":
+                    if (!Core.Device.BuildActions.IsSafeUrl(a.Target)) return;
+                    OpenUrl(a.Target!);
+                    break;
+                case "open":
+                    if (a.Target is null || !Core.Device.BuildActions.IsSafeProgram(a.Target) || !File.Exists(a.Target))
+                    { MessageBox.Show(this, "The program could not be found.", a.Label); return; }
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(a.Target, a.Args ?? "")
+                    {
+                        UseShellExecute = true, Verb = a.Elevate ? "runas" : "",
+                    });
+                    StatusBarText.Text = $"Started {a.Label}.";
+                    break;
+                case "tab":
+                    if (a.Target == "apps-review")
+                    {
+                        AppsReviewOnly.IsChecked = false;
+                        AppsSearch.Text = "";
+                        SelectTab("apps");
+                        if (!_inventoryLoaded) await LoadInventoryAsync();
+                        StatusBarText.Text = "Tick the bundled apps to remove and click Uninstall ticked.";
+                    }
+                    else if (a.Target is { } t) SelectTab(t);
+                    break;
+                case "winget":
+                case "run":
+                    if (!_tray.AgentReachable) { MessageBox.Show(this, "The PatchSentinel agent is not running, so this can't be done from here.", a.Label); return; }
+                    var what = a.Kind == "winget" ? $"install {a.Target} with winget" : $"run {Path.GetFileName(a.Target)} {a.Args}";
+                    if (MessageBox.Show(this, $"{a.Label}?{Environment.NewLine}{Environment.NewLine}PatchSentinel will {what} as administrator in the background. " +
+                            "The checklist refreshes when it has finished, and the result is recorded in the history." +
+                            (a.Description is { } d ? Environment.NewLine + Environment.NewLine + d : ""),
+                            a.Label, MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+                    var r = await _tray.Client.SendAsync(Commands.BuildAction, new BuildActionRequest(item.Check.Id, a.Id));
+                    StatusBarText.Text = r.Ok ? $"{a.Label} started. Progress shows in the status bar; the checklist refreshes when it finishes." : r.Error ?? "Could not start.";
+                    if (!r.Ok) MessageBox.Show(this, r.Error ?? "Could not start.", a.Label);
+                    await _tray.PollAsync();
+                    break;
+            }
+        }
+        catch (System.ComponentModel.Win32Exception) { StatusBarText.Text = "Cancelled."; }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, a.Label); }
+    }
+
+    private void RowSignoffChecked_Click(object sender, RoutedEventArgs e) => RowSignoff(sender, Core.Device.SignoffStatus.Checked);
+
+    private void RowSignoffNotRequired_Click(object sender, RoutedEventArgs e) => RowSignoff(sender, Core.Device.SignoffStatus.NotRequired);
+
+    private void RowSignoff(object sender, Core.Device.SignoffStatus status)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ChecklistRow row) _ = SignoffAsync([row], status);
+    }
+
+    private List<ChecklistRow> SelectedChecklistRows() => ChecklistGrid.SelectedItems.OfType<ChecklistRow>().ToList();
+
+    private async void SignoffChecked_Click(object sender, RoutedEventArgs e) => await SignoffAsync(SelectedChecklistRows(), Core.Device.SignoffStatus.Checked);
+
+    private async void SignoffNotRequired_Click(object sender, RoutedEventArgs e) => await SignoffAsync(SelectedChecklistRows(), Core.Device.SignoffStatus.NotRequired);
+
+    private async void SignoffClear_Click(object sender, RoutedEventArgs e)
+    {
+        var rows = SelectedChecklistRows().Where(r => r.Result.Signoff is not null).ToList();
+        if (rows.Count == 0) return;
+        if (MessageBox.Show(this, $"Clear the sign-off for {rows.Count} step(s)? This is recorded in the history.", "Clear sign-off",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        await SendSignoffsAsync(rows, null, null);
+    }
+
+    private async Task SignoffAsync(List<ChecklistRow> rows, Core.Device.SignoffStatus status)
+    {
+        if (rows.Count == 0) { MessageBox.Show(this, "Select the step(s) first.", "Build checklist"); return; }
+        if (!_tray.AgentReachable) { MessageBox.Show(this, "The PatchSentinel agent is not running, so sign-offs can't be saved.", "Build checklist"); return; }
+        var what = status == Core.Device.SignoffStatus.Checked ? "checked" : "not required";
+        var steps = string.Join(Environment.NewLine, rows.Select(r => $"  {r.Step}. {r.Title}"));
+        var needNote = status == Core.Device.SignoffStatus.NotRequired || rows.Any(r => r.Result.Status is Core.Device.CheckStatus.Fail or Core.Device.CheckStatus.Warn);
+        var note = PromptWindow.Ask(this, $"Mark as {what}",
+            $"Mark as {what}:{Environment.NewLine}{steps}{Environment.NewLine}{Environment.NewLine}" +
+            (needNote ? "Add a short note saying why (for example \"customer uses Sophos, not our AV\")." : "Add a note if you like (optional)."),
+            required: needNote);
+        if (note is null) return;
+        await SendSignoffsAsync(rows, status, note.Length == 0 ? null : note);
+    }
+
+    private async Task SendSignoffsAsync(List<ChecklistRow> rows, Core.Device.SignoffStatus? status, string? note)
+    {
+        try
+        {
+            foreach (var r in rows)
+            {
+                var res = await _tray.Client.SendAsync(Commands.SetSignoff, new SignoffRequest(r.Result.Id, status, note));
+                if (!res.Ok) { MessageBox.Show(this, res.Error ?? "Could not save.", "Build checklist"); break; }
+                r.Result.Signoff = res.As<Core.Device.BuildSignoff>();
+            }
+            ChecklistGrid.Items.Refresh();
+            RenderDevice();
+            await LoadHistoryAsync();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Build checklist"); }
+    }
+
+    private async void SignOffBuild_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scan is null || _scan.BuildChecks.Count == 0) { MessageBox.Show(this, "Run a scan first.", "Sign off build"); return; }
+        if (!_tray.AgentReachable) { MessageBox.Show(this, "The PatchSentinel agent is not running, so the sign-off can't be saved.", "Sign off build"); return; }
+        var open = _scan.BuildChecks.Where(c => !Core.Device.BuildSignoffStore.IsDone(c)).ToList();
+        var msg = open.Count == 0
+            ? "Every step is OK or signed off. Add a note for the handover if you like (optional)."
+            : $"{open.Count} step(s) are still outstanding:{Environment.NewLine}{string.Join(Environment.NewLine, open.Select(c => $"  {c.Step}. {c.Title}"))}" +
+              $"{Environment.NewLine}{Environment.NewLine}You can still sign off, but they will be listed as outstanding. Add a note explaining why.";
+        var note = PromptWindow.Ask(this, "Sign off build", msg, required: open.Count > 0);
+        if (note is null) return;
+        try
+        {
+            var res = await _tray.Client.SendAsync(Commands.SignOffBuild, new SignOffBuildRequest(note.Length == 0 ? null : note));
+            if (!res.Ok) { MessageBox.Show(this, res.Error ?? "Could not save.", "Sign off build"); return; }
+            _scan.BuildHandover = res.As<Core.Device.BuildHandover>();
+            RenderDevice();
+            await LoadHistoryAsync();
+            StatusBarText.Text = "Build signed off and recorded in the history.";
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Sign off build"); }
     }
 
     // ---------------- history ----------------

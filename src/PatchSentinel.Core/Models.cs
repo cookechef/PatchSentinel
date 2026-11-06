@@ -199,6 +199,7 @@ public sealed class ScanResult
     public List<InstalledItem> Inventory { get; set; } = [];
     public global::PatchSentinel.Core.Device.DeviceInfo? Device { get; set; }
     public List<global::PatchSentinel.Core.Device.BuildCheckResult> BuildChecks { get; set; } = [];
+    public global::PatchSentinel.Core.Device.BuildHandover? BuildHandover { get; set; }
     public List<Browsers.BrowserExtension> Extensions { get; set; } = [];
     public List<string> Warnings { get; set; } = [];
 

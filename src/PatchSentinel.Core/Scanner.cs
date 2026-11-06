@@ -60,8 +60,11 @@ public static class Scanner
         {
             device = await Device.DeviceCollector.CollectAsync(inventory, s.PublicIpLookup && opt.AllowNetwork, today, ct);
             warnings.AddRange(device.Warnings);
-            if (catalog.BuildChecklist.Count > 0) checks = Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today);
+            if (catalog.BuildChecklist.Count > 0) checks = Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today, catalog.Links);
         }
+
+        var signoffs = Device.BuildSignoffStore.Load();
+        Device.BuildSignoffStore.Apply(checks, signoffs);
 
         var extensions = s.ScanBrowserExtensions && opt.CheckExtensions
             ? await ScanExtensionsAsync(s.ExtensionStoreLookup && opt.AllowNetwork, isSystem, warnings, ct)
@@ -94,15 +97,26 @@ public static class Scanner
             Inventory = inventory,
             Device = device,
             BuildChecks = checks,
+            BuildHandover = signoffs.Handover,
             Extensions = extensions,
             Warnings = warnings.Distinct().ToList(),
         };
     }
 
+    /// <summary>Uninstalls the browsers finished during the last extension scan (the agent records them in the history).</summary>
+    public static List<Browsers.PendingRemoval> LastCompletedRemovals { get; private set; } = [];
+
     public static async Task<List<Browsers.BrowserExtension>> ScanExtensionsAsync(bool online, bool isSystem, List<string> warnings, CancellationToken ct)
     {
         Browsers.ExtensionChecker.CacheDir = CacheDirFor(isSystem);
-        var list = await Task.Run(() => Browsers.ExtensionInventory.Collect(allUsers: isSystem || Platform.IsElevated, warnings), ct);
+        var allUsers = isSystem || Platform.IsElevated;
+        var list = await Task.Run(() => Browsers.ExtensionInventory.Collect(allUsers, warnings), ct);
+        LastCompletedRemovals = [];
+        if (allUsers)
+        {
+            try { LastCompletedRemovals = Browsers.ExtensionPolicy.CompletePendingRemovals(list); }
+            catch (Exception ex) { warnings.Add($"Could not tidy up extension uninstall policies: {ex.Message}"); }
+        }
         await Browsers.ExtensionChecker.CheckAsync(list, online, warnings, ct);
         return list.OrderByDescending(e => e.Concern).ThenBy(e => e.BrowserName).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }

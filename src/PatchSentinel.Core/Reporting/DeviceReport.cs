@@ -140,11 +140,27 @@ public static class DeviceReport
         return sheet;
     }
 
-    public static XSheet ChecklistSheet(IReadOnlyList<BuildCheckResult> checks)
+    public static XSheet ChecklistSheet(IReadOnlyList<BuildCheckResult> checks, BuildHandover? handover = null)
     {
-        var sheet = new XSheet { Name = "Build checklist", Columns = [("Step", 6), ("Check", 60), ("Status", 15), ("Detail", 100)] };
+        var sheet = new XSheet
+        {
+            Name = "Build checklist",
+            Columns = [("Step", 6), ("Check", 55), ("Status", 15), ("Detail", 80), ("Sign-off", 14), ("Signed off by", 18), ("When", 17), ("Note", 40)],
+        };
         foreach (var c in checks)
-            sheet.Rows.Add([new XCell(c.Step.ToString()), new XCell(c.Title, CellStyle.Wrap), new XCell(StatusText(c.Status), Style(c.Status)), new XCell(c.Detail, CellStyle.Wrap)]);
+        {
+            var so = c.Signoff;
+            sheet.Rows.Add([new XCell(c.Step.ToString()), new XCell(c.Title, CellStyle.Wrap), new XCell(StatusText(c.Status), Style(c.Status)), new XCell(c.Detail, CellStyle.Wrap),
+                new XCell(so is null ? "" : so.Status == SignoffStatus.Checked ? "Checked" : "Not required", so is null ? CellStyle.Normal : CellStyle.Green),
+                new XCell(so?.By), new XCell(so?.At.LocalDateTime.ToString("yyyy-MM-dd HH:mm")), new XCell(so?.Note, CellStyle.Wrap)]);
+        }
+        if (handover is not null)
+        {
+            sheet.Rows.Add([new XCell(""), new XCell(""), new XCell(""), new XCell(""), new XCell(""), new XCell(""), new XCell(""), new XCell("")]);
+            sheet.Rows.Add([new XCell(""), new XCell("Build signed off", CellStyle.Section), new XCell(handover.StepsOutstanding == 0 ? "Complete" : $"{handover.StepsOutstanding} outstanding", handover.StepsOutstanding == 0 ? CellStyle.Green : CellStyle.Amber),
+                new XCell(handover.Outstanding.Count > 0 ? "Outstanding: " + string.Join("; ", handover.Outstanding) : "All steps OK or signed off.", CellStyle.Wrap),
+                new XCell("Handover"), new XCell(handover.By), new XCell(handover.At.LocalDateTime.ToString("yyyy-MM-dd HH:mm")), new XCell(handover.Note, CellStyle.Wrap)]);
+        }
         return sheet;
     }
 
@@ -160,7 +176,7 @@ public static class DeviceReport
 .st-Info,.st-Manual{background:#eef4ff;color:#3538cd}
 """;
 
-    public static string Html(DeviceInfo d, IReadOnlyList<BuildCheckResult> checks)
+    public static string Html(DeviceInfo d, IReadOnlyList<BuildCheckResult> checks, BuildHandover? handover = null)
     {
         static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
         static string Badge(CheckStatus? s) => s is { } v ? $"<span class=\"st st-{v}\">{E(StatusText(v))}</span>" : "";
@@ -179,20 +195,24 @@ public static class DeviceReport
             var fail = checks.Count(c => c.Status == CheckStatus.Fail);
             var warn = checks.Count(c => c.Status == CheckStatus.Warn);
             sb.Append($"<h2>Device build checklist <span class=\"muted\" style=\"font-size:13px;font-weight:400\">{fail} need action, {warn} to check</span></h2>");
-            sb.Append("<table><tr><th>Step</th><th>Check</th><th>Status</th><th>Detail</th></tr>");
+            sb.Append(handover is null
+                ? "<p class=\"small muted\">The build has not been signed off.</p>"
+                : $"<p><b>{E(handover.Text)}</b>{(handover.Outstanding.Count > 0 ? $"<br><span class=\"small muted\">Outstanding: {E(string.Join("; ", handover.Outstanding))}</span>" : "")}</p>");
+            sb.Append("<table><tr><th>Step</th><th>Check</th><th>Status</th><th>Detail</th><th>Sign-off</th></tr>");
             foreach (var c in checks)
-                sb.Append($"<tr><td>{c.Step}</td><td>{E(c.Title)}</td><td>{Badge(c.Status)}</td><td class=\"small\">{E(c.Detail)}</td></tr>");
+                sb.Append($"<tr><td>{c.Step}</td><td>{E(c.Title)}</td><td>{Badge(c.Status)}</td><td class=\"small\">{E(c.Detail)}</td><td class=\"small\">{E(c.Signoff?.Text)}</td></tr>");
             sb.Append("</table>");
         }
         return sb.ToString();
     }
 
-    public static string ToCsv(DeviceInfo d, IReadOnlyList<BuildCheckResult> checks)
+    public static string ToCsv(DeviceInfo d, IReadOnlyList<BuildCheckResult> checks, BuildHandover? handover = null)
     {
         static string Q(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
-        var sb = new StringBuilder("Section,Item,Value,Status\r\n");
+        var sb = new StringBuilder("Section,Item,Value,Status,Sign-off\r\n");
         foreach (var r in Rows(d)) sb.Append($"{Q(r.Section)},{Q(r.Field)},{Q(r.Value)},{Q(r.Status is { } s ? StatusText(s) : "")}\r\n");
-        foreach (var c in checks) sb.Append($"{Q("Build checklist")},{Q($"{c.Step}. {c.Title}")},{Q(c.Detail)},{Q(StatusText(c.Status))}\r\n");
+        foreach (var c in checks) sb.Append($"{Q("Build checklist")},{Q($"{c.Step}. {c.Title}")},{Q(c.Detail)},{Q(StatusText(c.Status))},{Q(c.Signoff?.Text)}\r\n");
+        if (handover is not null) sb.Append($"{Q("Build checklist")},{Q("Build signed off")},{Q(string.Join("; ", handover.Outstanding))},{Q(handover.StepsOutstanding == 0 ? "Complete" : $"{handover.StepsOutstanding} outstanding")},{Q(handover.Text)}\r\n");
         return sb.ToString();
     }
 }

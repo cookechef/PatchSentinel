@@ -545,3 +545,98 @@ public class BrowserExtensionTests
         Assert.Equal(Browsers.ExtensionStatus.UpToDate, ff.Status);
     }
 }
+
+public class BuildActionTests
+{
+    private static readonly Dictionary<string, string> Links = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["atera"] = "https://app.atera.com/", ["sentinelone"] = "", ["bad"] = "javascript:alert(1)",
+    };
+
+    private static Device.BuildCheckResult Result(Device.CheckStatus s) => new() { Id = "x", Status = s };
+
+    [Fact]
+    public void Shows_links_and_hides_empty_or_unsafe_ones()
+    {
+        var rule = new Device.BuildCheckRule
+        {
+            Id = "x",
+            Actions =
+            [
+                new() { Id = "a", Label = "Atera", Kind = "link", Link = "atera" },
+                new() { Id = "s", Label = "S1", Kind = "link", Link = "sentinelone" },
+                new() { Id = "b", Label = "Bad", Kind = "link", Link = "bad" },
+                new() { Id = "w", Label = "Windows Update", Kind = "url", Url = "ms-settings:windowsupdate" },
+            ],
+        };
+        var v = Device.BuildActions.Visible(rule, Result(Device.CheckStatus.Fail), new Device.DeviceInfo(), [], Links);
+        Assert.Equal(["a", "w"], v.Select(x => x.Id).ToList());
+        Assert.Equal("https://app.atera.com/", v[0].Target);
+    }
+
+    [Fact]
+    public void Installs_only_show_for_the_right_manufacturer_and_when_missing()
+    {
+        var rule = new Device.BuildCheckRule
+        {
+            Id = "x",
+            Actions =
+            [
+                new() { Id = "dcu", Label = "Install DCU", Kind = "winget", WingetId = "Dell.CommandUpdate.Universal", Manufacturer = "Dell" },
+                new() { Id = "lsu", Label = "Install LSU", Kind = "winget", WingetId = "Lenovo.SystemUpdate", Manufacturer = "Lenovo" },
+                new() { Id = "7z", Label = "Install 7-Zip", Kind = "winget", WingetId = "7zip.7zip", IfAppMissing = ["7-Zip"] },
+                new() { Id = "tab", Label = "Apps", Kind = "tab", Tab = "apps-review", OnlyWhenNotOk = true },
+            ],
+        };
+        var lenovo = new Device.DeviceInfo { Manufacturer = "LENOVO" };
+        var apps = new List<InstalledItem> { new() { Name = "7-Zip 26.05 (x64)", Source = ItemSource.Registry } };
+        var v = Device.BuildActions.Visible(rule, Result(Device.CheckStatus.Fail), lenovo, apps, Links);
+        Assert.Equal(["lsu", "tab"], v.Select(x => x.Id).ToList());
+
+        // Installs and tab-only-when-not-OK are hidden once the step passes.
+        Assert.Empty(Device.BuildActions.Visible(rule, Result(Device.CheckStatus.Pass), lenovo, apps, Links));
+    }
+
+    [Fact]
+    public void Programs_must_be_in_trusted_folders()
+    {
+        Assert.False(Device.BuildActions.IsSafeProgram(@"C:\Users\bob\AppData\Local\Temp\evil.exe"));
+        Assert.False(Device.BuildActions.IsSafeUrl("file:///C:/evil.exe"));
+        Assert.True(Device.BuildActions.IsSafeUrl("https://cloud.gravityzone.bitdefender.com/"));
+        Assert.True(Device.BuildActions.IsSafeUrl("windowsdefender:"));
+    }
+
+    [Fact]
+    public void Catalogue_actions_parse_and_reference_valid_packages()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "rules", "eol-rules.json");
+        var catalog = File.Exists(path) ? Rules.RuleCatalogLoader.Parse(File.ReadAllText(path)) : Rules.RuleCatalogLoader.LoadEmbedded();
+        var actions = catalog.BuildChecklist.SelectMany(r => r.Actions).ToList();
+        Assert.True(actions.Count > 20);
+        Assert.True(actions.Where(a => a.Kind == "winget").All(a => Updates.WingetClient.IsValidId(a.WingetId!)));
+        Assert.True(actions.Where(a => a.Kind == "link").All(a => catalog.Links.ContainsKey(a.Link!)));
+        Assert.True(actions.Where(a => a.Kind == "url").All(a => Device.BuildActions.IsSafeUrl(a.Url)));
+        Assert.True(actions.All(a => a.Kind is "url" or "link" or "open" or "run" or "winget" or "tab"));
+    }
+
+    [Fact]
+    public void Handover_counts_signed_off_steps_as_done()
+    {
+        var checks = new List<Device.BuildCheckResult>
+        {
+            new() { Step = 1, Id = "a", Title = "A", Status = Device.CheckStatus.Pass },
+            new() { Step = 2, Id = "b", Title = "B", Status = Device.CheckStatus.Fail },
+            new() { Step = 3, Id = "c", Title = "C", Status = Device.CheckStatus.Manual },
+            new() { Step = 4, Id = "d", Title = "D", Status = Device.CheckStatus.Warn },
+        };
+        var file = new Device.BuildSignoffFile();
+        file.Steps["c"] = new Device.BuildSignoff { Status = Device.SignoffStatus.Checked, By = "ADM\\ross" };
+        file.Steps["d"] = new Device.BuildSignoff { Status = Device.SignoffStatus.NotRequired, By = "ADM\\ross", Note = "customer uses Sophos" };
+        Device.BuildSignoffStore.Apply(checks, file);
+        var h = Device.BuildSignoffStore.Summarise(checks, "ADM\\ross", null);
+        Assert.Equal(1, h.StepsOk);
+        Assert.Equal(2, h.StepsSignedOff);
+        Assert.Equal(1, h.StepsOutstanding);
+        Assert.Equal(["2. B"], h.Outstanding);
+    }
+}

@@ -47,6 +47,11 @@ public static class Commands
     public const string InstallSelfUpdate = "install-self-update";
     public const string ScanExtensions = "scan-extensions";
     public const string BlockExtension = "block-extension";
+    /// <summary>block, unblock or uninstall.</summary>
+    public const string ExtensionAction = "extension-action";
+    public const string BuildAction = "build-action";
+    public const string SetSignoff = "set-signoff";
+    public const string SignOffBuild = "sign-off-build";
 }
 
 /// <summary>An app whose automatic update keeps failing and needs updating by hand.</summary>
@@ -192,3 +197,12 @@ public sealed class AgentPipeClient
 }
 
 public sealed record ExtensionScanView(List<Browsers.BrowserExtension> Extensions, List<string> Warnings);
+
+public sealed record ExtensionActionRequest(Browsers.Browser Browser, string Id, string Name, string Action);
+
+public sealed record BuildActionRequest(string CheckId, string ActionId);
+
+/// <summary>Status null clears the sign-off.</summary>
+public sealed record SignoffRequest(string CheckId, Device.SignoffStatus? Status, string? Note);
+
+public sealed record SignOffBuildRequest(string? Note);

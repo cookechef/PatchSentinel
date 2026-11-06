@@ -33,6 +33,8 @@ public static class RuleCatalogLoader
     {
         var rules = baseCatalog.Rules.ToDictionary(r => r.Id, StringComparer.OrdinalIgnoreCase);
         foreach (var r in overrides.Rules) rules[r.Id] = r;
+        var links = new Dictionary<string, string>(baseCatalog.Links, StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in overrides.Links) links[k] = v;
         var cats = baseCatalog.Categories.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
         foreach (var c in overrides.Categories) cats[c.Id] = c;
         return new RuleCatalog
@@ -42,6 +44,7 @@ public static class RuleCatalogLoader
             Rules = rules.Values.ToList(),
             Categories = cats.Values.ToList(),
             BuildChecklist = overrides.BuildChecklist.Count > 0 ? overrides.BuildChecklist : baseCatalog.BuildChecklist,
+            Links = links,
         };
     }
 

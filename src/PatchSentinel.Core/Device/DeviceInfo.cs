@@ -174,4 +174,8 @@ public sealed class BuildCheckResult
     public string Title { get; set; } = "";
     public CheckStatus Status { get; set; }
     public string Detail { get; set; } = "";
+    /// <summary>Buttons that apply to this step on this device.</summary>
+    public List<BuildActionView> Actions { get; set; } = [];
+    /// <summary>A technician's sign-off for this step (checked or not required), if any.</summary>
+    public BuildSignoff? Signoff { get; set; }
 }

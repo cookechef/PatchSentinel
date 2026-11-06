@@ -19,6 +19,8 @@ public sealed class BuildCheckRule
     /// <summary>Status when an app check is not met: Fail (default), Warn or Info (for "if required" steps).</summary>
     public CheckStatus WhenMissing { get; set; } = CheckStatus.Fail;
     public string? Hint { get; set; }
+    /// <summary>Buttons for this step (install or run a tool, open a portal...).</summary>
+    public List<BuildAction> Actions { get; set; } = [];
 }
 
 public sealed class AppGroup
@@ -29,7 +31,8 @@ public sealed class AppGroup
 
 public static class BuildChecklist
 {
-    public static List<BuildCheckResult> Evaluate(IReadOnlyList<BuildCheckRule> rules, DeviceInfo d, IReadOnlyList<InstalledItem> inventory, DateOnly today)
+    public static List<BuildCheckResult> Evaluate(IReadOnlyList<BuildCheckRule> rules, DeviceInfo d, IReadOnlyList<InstalledItem> inventory, DateOnly today,
+        IReadOnlyDictionary<string, string>? links = null)
     {
         var apps = inventory.Where(i => i.Source == ItemSource.Registry && !i.IsSystemComponent).ToList();
         var results = new List<BuildCheckResult>();
@@ -42,6 +45,7 @@ public static class BuildChecklist
             r.Id = rule.Id;
             r.Title = rule.Title;
             if (!string.IsNullOrEmpty(rule.Hint) && r.Status is CheckStatus.Fail or CheckStatus.Warn) r.Detail = $"{r.Detail} {rule.Hint}".Trim();
+            r.Actions = BuildActions.Visible(rule, r, d, apps, links ?? new Dictionary<string, string>());
             results.Add(r);
         }
         return results;

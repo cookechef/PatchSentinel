@@ -90,7 +90,10 @@ internal static class Cli
             --offline                  Do not contact the extension stores
           extensions block --browser <chrome|edge|brave|firefox> --id <extensionId>
                                        Block an extension by machine policy (applied at the browser's next start)
-          extensions unblock --browser <...> --id <extensionId>
+          extensions uninstall --browser <...> --id <extensionId>
+                                       Uninstall for every user at the browser's next start (the service
+                                       takes the policy off again once it has gone)
+          extensions unblock --browser <...> --id <extensionId>   Unblock or cancel an uninstall
 
           inventory                    List installed apps with category and security advisory
             --xlsx <file> --html <file> --csv <file>   Export the list
@@ -363,16 +366,18 @@ internal static class Cli
             Core.Inventory.RegistryInventory.Collect(allLoadedUserHives: Platform.IsSystem, Platform.CurrentUserSid, warnings));
         var today = DateOnly.FromDateTime(DateTime.Now);
         var device = await Core.Device.DeviceCollector.CollectAsync(inventory, !Has(args, "--no-public-ip"), today, ct);
-        var checks = Core.Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today);
+        var checks = Core.Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today, catalog.Links);
+        var signoffs = Core.Device.BuildSignoffStore.Load();
+        Core.Device.BuildSignoffStore.Apply(checks, signoffs);
         var computer = device.ComputerName;
         var apps = inventory.Where(i => !i.IsSystemComponent).ToList();
 
-        if (Value(args, "--xlsx") is { } xlsx) { await using var f = File.Create(xlsx); InventoryExporter.WriteXlsx(apps, computer, f, device, checks); }
-        if (Value(args, "--html") is { } html) await File.WriteAllTextAsync(html, InventoryExporter.ToHtml(apps, computer, device, checks), ct);
-        if (Value(args, "--csv") is { } csv) await File.WriteAllTextAsync(csv, DeviceReport.ToCsv(device, checks), ct);
+        if (Value(args, "--xlsx") is { } xlsx) { await using var f = File.Create(xlsx); InventoryExporter.WriteXlsx(apps, computer, f, device, checks, handover: signoffs.Handover); }
+        if (Value(args, "--html") is { } html) await File.WriteAllTextAsync(html, InventoryExporter.ToHtml(apps, computer, device, checks, handover: signoffs.Handover), ct);
+        if (Value(args, "--csv") is { } csv) await File.WriteAllTextAsync(csv, DeviceReport.ToCsv(device, checks, signoffs.Handover), ct);
         if (Has(args, "--json"))
         {
-            Console.WriteLine(JsonSerializer.Serialize(new { device, buildChecks = checks }, Json.Options));
+            Console.WriteLine(JsonSerializer.Serialize(new { device, buildChecks = checks, buildHandover = signoffs.Handover }, Json.Options));
         }
         else
         {
@@ -384,7 +389,9 @@ internal static class Cli
             }
             Console.WriteLine();
             Console.WriteLine("BUILD CHECKLIST");
-            foreach (var c in checks) Console.WriteLine($"  {c.Step,2}. [{DeviceReport.StatusText(c.Status),-13}] {c.Title} - {c.Detail}");
+            foreach (var c in checks)
+                Console.WriteLine($"  {c.Step,2}. [{DeviceReport.StatusText(c.Status),-13}] {c.Title} - {c.Detail}{(c.Signoff is { } so ? $"  ({so.Text})" : "")}");
+            Console.WriteLine(signoffs.Handover is { } h ? $"  {h.Text}" : "  Build not signed off yet.");
         }
         var failed = checks.Count(c => c.Status == Core.Device.CheckStatus.Fail);
         return failed > 0 ? ExitNeedsAttention : ExitClean;
@@ -393,7 +400,7 @@ internal static class Cli
     private static async Task<int> ExtensionsAsync(string[] args, CancellationToken ct)
     {
         var sub = args.Length > 1 && !args[1].StartsWith("--", StringComparison.Ordinal) ? args[1].ToLowerInvariant() : "list";
-        if (sub is "block" or "unblock")
+        if (sub is "block" or "unblock" or "uninstall")
         {
             if (!Platform.IsElevated) { Console.Error.WriteLine("Run elevated: blocking an extension writes a machine policy."); return ExitError; }
             if (!Enum.TryParse<Core.Browsers.Browser>(Value(args, "--browser"), true, out var browser)) return Usage("--browser must be chrome, edge, brave or firefox.");
@@ -402,7 +409,15 @@ internal static class Cli
             var failed = false;
             foreach (var id in ids)
             {
-                try { Console.WriteLine(sub == "block" ? Core.Browsers.ExtensionPolicy.Block(browser, id) : Core.Browsers.ExtensionPolicy.Unblock(browser, id)); }
+                try
+                {
+                    Console.WriteLine(sub switch
+                    {
+                        "block" => Core.Browsers.ExtensionPolicy.Block(browser, id),
+                        "uninstall" => Core.Browsers.ExtensionPolicy.Uninstall(browser, id, id, Environment.UserName),
+                        _ => Core.Browsers.ExtensionPolicy.Unblock(browser, id),
+                    });
+                }
                 catch (Exception ex) { Console.Error.WriteLine($"{id}: {ex.Message}"); failed = true; }
             }
             return failed ? ExitError : ExitClean;
@@ -412,6 +427,7 @@ internal static class Cli
         var warnings = new List<string>();
         var s = SettingsStore.LoadEffective(AppPaths.SettingsFile).Settings;
         var list = await Scanner.ScanExtensionsAsync(s.ExtensionStoreLookup && !Has(args, "--offline"), Platform.IsSystem, warnings, ct);
+        foreach (var done in Scanner.LastCompletedRemovals) Console.WriteLine($"Uninstalled: {done.Name} ({done.Browser}) - uninstall policy taken off.");
         var computer = Environment.MachineName;
         if (Value(args, "--xlsx") is { } xlsx) { await using var f = File.Create(xlsx); Core.Reporting.ExtensionExporter.WriteXlsx(list, computer, f); }
         if (Value(args, "--html") is { } html) await File.WriteAllTextAsync(html, Core.Reporting.ExtensionExporter.ToHtml(list, computer), ct);

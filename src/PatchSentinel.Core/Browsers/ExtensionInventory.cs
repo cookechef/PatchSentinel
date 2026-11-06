@@ -338,14 +338,22 @@ public static class ExtensionInventory
             }
             catch { /* ignore */ }
         }
-        try
+        foreach (var b in new[] { Browser.Chrome, Browser.Edge, Browser.Brave, Browser.Firefox })
         {
-            using var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Mozilla\Firefox");
-            if (k?.GetValue("ExtensionSettings") is { } raw && JsonNode.Parse(raw is string[] parts ? string.Join("", parts) : raw.ToString()!) is JsonObject es)
-                foreach (var e in list.Where(e => e.Browser == Browser.Firefox))
-                    if (Str(es[e.Id]?["installation_mode"]) == "blocked") e.BlockedByPolicy = true;
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(ExtensionPolicy.VendorKey(b)!);
+                var raw = k?.GetValue("ExtensionSettings");
+                if (raw is null || JsonNode.Parse(raw is string[] parts ? string.Join("\n", parts) : raw.ToString()!) is not JsonObject es) continue;
+                foreach (var e in list.Where(e => e.Browser == b))
+                {
+                    var mode = es.FirstOrDefault(kv => kv.Key.Equals(e.Id, StringComparison.OrdinalIgnoreCase)).Value?["installation_mode"] is JsonValue v && v.TryGetValue<string>(out var m) ? m : null;
+                    if (mode == "blocked") e.BlockedByPolicy = true;
+                    if (mode == "removed") e.PendingRemoval = true;
+                }
+            }
+            catch { /* ignore */ }
         }
-        catch { /* ignore */ }
     }
 
     // ---------------- helpers ----------------

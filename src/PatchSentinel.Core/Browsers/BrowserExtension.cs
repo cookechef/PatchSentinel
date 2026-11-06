@@ -43,6 +43,8 @@ public sealed class BrowserExtension
     public bool BroadAccess { get; set; }
     public List<string> SensitivePermissions { get; set; } = [];
     public bool BlockedByPolicy { get; set; }
+    /// <summary>PatchSentinel has asked the browser to uninstall it; waiting for the browser to restart.</summary>
+    public bool PendingRemoval { get; set; }
     public bool FirefoxBlocklisted { get; set; }
     public bool FirefoxUnsigned { get; set; }
 
@@ -53,7 +55,7 @@ public sealed class BrowserExtension
 
     public string BrowserName => Browser switch { Browser.Edge => "Microsoft Edge", Browser.Chrome => "Google Chrome", Browser.Brave => "Brave", _ => "Firefox" };
 
-    public string StatusText => BlockedByPolicy ? "Blocked by policy" : Status switch
+    public string StatusText => PendingRemoval ? "Uninstall pending (restart browser)" : BlockedByPolicy ? "Blocked by policy" : Status switch
     {
         ExtensionStatus.UpToDate => "Up to date",
         ExtensionStatus.UpdateAvailable => $"Update available ({LatestVersion})",

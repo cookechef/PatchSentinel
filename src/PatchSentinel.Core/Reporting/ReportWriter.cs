@@ -68,7 +68,7 @@ ul{margin:4px 0;padding-left:18px}.badge{font-weight:600;white-space:nowrap}.Rev
 {{(c.SoftwareToReview > 0 ? $"<p class=\"Medium\" style=\"margin-top:14px\"><b>{c.SoftwareToReview}</b> installed app(s) need a security review (monitoring, remote access or similar) - see below.</p>" : "")}}
 """);
 
-        if (r.Device is not null) sb.Append(DeviceReport.Html(r.Device, r.BuildChecks));
+        if (r.Device is not null) sb.Append(DeviceReport.Html(r.Device, r.BuildChecks, r.BuildHandover));
 
         sb.Append("<h2>Legacy and end-of-life software</h2>");
         if (r.Findings.Count == 0) sb.Append("<p class=\"Low\">No end-of-life or unpatched runtimes found.</p>");

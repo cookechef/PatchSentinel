@@ -246,6 +246,12 @@
                                        Text="Device details are collected by the PatchSentinel agent during a scan. Click Refresh (scan now)."/>
                             <TextBlock Text="Device build checklist" Style="{StaticResource SectionLabel}" FontSize="15" Margin="0,4,0,2"/>
                             <TextBlock x:Name="ChecklistSummary" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <Button DockPanel.Dock="Right" x:Name="SignOffBuildButton" Content="Sign off build..." Click="SignOffBuild_Click" Style="{DynamicResource Primary}" Margin="8,0,0,0"
+                                        ToolTip="Record that the build has been worked through and the device is ready to hand over. Saved in the history and the device report."/>
+                                <TextBlock x:Name="HandoverText" TextWrapping="Wrap" VerticalAlignment="Center"
+                                           Text="Use the buttons on each step to fix it, or tick Checked / Not required once you have dealt with it. Every sign-off is logged with your name for auditing."/>
+                            </DockPanel>
                             <DataGrid x:Name="ChecklistGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" ClipboardCopyMode="IncludeHeader"
                                       GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource GridLine}" Background="{DynamicResource SurfaceBg}"
                                       BorderBrush="{DynamicResource SurfaceBorder}" RowHeaderWidth="0" SelectionMode="Extended" CanUserSortColumns="False">
@@ -253,6 +259,10 @@
                                     <ContextMenu>
                                         <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
                                         <MenuItem Header="Copy check and detail" Click="CopyColumn_Click" Tag="CopyText"/>
+                                        <Separator/>
+                                        <MenuItem Header="Mark selected as checked..." Click="SignoffChecked_Click"/>
+                                        <MenuItem Header="Mark selected as not required..." Click="SignoffNotRequired_Click"/>
+                                        <MenuItem Header="Clear sign-off" Click="SignoffClear_Click"/>
                                     </ContextMenu>
                                 </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
@@ -291,9 +301,38 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="4*">
+                                    <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="3*">
                                         <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style></DataGridTextColumn.ElementStyle>
                                     </DataGridTextColumn>
+                                    <DataGridTemplateColumn Header="Actions" Width="2*" ClipboardContentBinding="{Binding ActionsText}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ItemsControl ItemsSource="{Binding ActionItems}" Margin="0,2">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Content="{Binding Label}" ToolTip="{Binding Tooltip}" Click="BuildAction_Click" Padding="8,2" Margin="0,2,6,2" FontSize="12" MinWidth="0" MinHeight="0"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Sign-off" Width="1.5*" ClipboardContentBinding="{Binding SignoffText}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,2">
+                                                    <TextBlock Text="{Binding SignoffText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource OkText}" Visibility="{Binding SignedVisibility}"/>
+                                                    <WrapPanel Visibility="{Binding UnsignedVisibility}">
+                                                        <Button Content="Checked" Click="RowSignoffChecked_Click" Padding="8,2" Margin="0,2,6,2" FontSize="12" MinWidth="0" MinHeight="0"
+                                                                ToolTip="I have checked this step"/>
+                                                        <Button Content="Not required" Click="RowSignoffNotRequired_Click" Padding="8,2" Margin="0,2,6,2" FontSize="12" MinWidth="0" MinHeight="0"
+                                                                ToolTip="This step is not needed for this customer or device"/>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                             <WrapPanel x:Name="DeviceSections" Margin="0,16,0,0"/>
@@ -416,16 +455,23 @@
                             <ComboBoxItem Content="Brave" Tag="Brave"/>
                         </ComboBox>
                         <CheckBox x:Name="ExtReviewOnly" Content="Only extensions that need attention" Margin="16,0,0,0" VerticalAlignment="Center" Click="ExtFilter_Changed"/>
+                        <Button Content="Tick all shown" Click="ExtTickAll_Click" Margin="16,0,0,0" Padding="8,2"/>
+                        <Button Content="Untick all" Click="ExtUntickAll_Click" Margin="6,0,0,0" Padding="8,2"/>
                         <TextBlock x:Name="ExtCountText" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
                     </StackPanel>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                         <Button x:Name="ExtCheckButton" Content="Check extensions now" Click="CheckExtensions_Click" Style="{DynamicResource Primary}"/>
-                        <Button x:Name="ExtBlockButton" Content="Block selected..." Click="BlockExtensions_Click"/>
+                        <Button x:Name="ExtUninstallButton" Content="Uninstall ticked..." Click="UninstallExtensions_Click"
+                                ToolTip="The browser removes them for every user when it next starts"/>
+                        <Button x:Name="ExtBlockButton" Content="Block ticked..." Click="BlockExtensions_Click"
+                                ToolTip="Switch them off for good and stop them being reinstalled"/>
+                        <Button Content="Open in browser" Click="OpenExtensionInBrowser_Click"
+                                ToolTip="Opens the extension's page in the browser, where you can update or remove it"/>
                         <Button Content="Open store page" Click="OpenExtensionStore_Click"/>
                         <Button Content="Export list (Excel, HTML or CSV)..." Click="ExportExtensions_Click"/>
                         <TextBlock x:Name="ExtResultText" VerticalAlignment="Center" Margin="8,0,0,8" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"/>
                     </WrapPanel>
-                    <DataGrid x:Name="ExtGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" ClipboardCopyMode="IncludeHeader" IsReadOnly="True"
+                    <DataGrid x:Name="ExtGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" ClipboardCopyMode="IncludeHeader"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource GridLine}"
                               Background="{DynamicResource SurfaceBg}" BorderBrush="{DynamicResource SurfaceBorder}" RowHeaderWidth="0"
                               MouseDoubleClick="ExtGrid_MouseDoubleClick">
@@ -438,12 +484,22 @@
                                 <MenuItem Header="Open store page" Click="OpenExtensionStore_Click"/>
                                 <MenuItem Header="Open profile folder" Click="OpenExtensionProfile_Click"/>
                                 <Separator/>
+                                <MenuItem Header="Open in browser" Click="OpenExtensionInBrowser_Click"/>
+                                <Separator/>
+                                <MenuItem Header="Uninstall selected..." Click="UninstallExtensions_Click"/>
                                 <MenuItem Header="Block selected..." Click="BlockExtensions_Click"/>
-                                <MenuItem Header="Unblock selected" Click="UnblockExtensions_Click"/>
+                                <MenuItem Header="Unblock / cancel uninstall" Click="UnblockExtensions_Click"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Status" Width="1.5*" SortMemberPath="ConcernRank" ClipboardContentBinding="{Binding Status}">
+                            <DataGridTemplateColumn Header="" Width="34">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Tick to uninstall or block"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Status" Width="1.5*" SortMemberPath="ConcernRank" ClipboardContentBinding="{Binding Status}" IsReadOnly="True">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border x:Name="Pill" CornerRadius="9" Padding="8,1" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#D1E9FF" ToolTip="{Binding Advice}">
@@ -468,14 +524,14 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Extension" Binding="{Binding Name}" Width="2.2*"/>
-                            <DataGridTextColumn Header="Browser" Binding="{Binding Browser}" Width="1.1*"/>
-                            <DataGridTextColumn Header="User / profile" Binding="{Binding Owner}" Width="1.3*"/>
-                            <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="0.8*"/>
-                            <DataGridTextColumn Header="Latest" Binding="{Binding Latest}" Width="0.8*"/>
-                            <DataGridTextColumn Header="On" Binding="{Binding EnabledText}" Width="40"/>
-                            <DataGridTextColumn Header="Installed from" Binding="{Binding Source}" Width="1.1*"/>
-                            <DataGridTextColumn Header="Access" Binding="{Binding Access}" Width="1.3*">
+                            <DataGridTextColumn IsReadOnly="True" Header="Extension" Binding="{Binding Name}" Width="2.2*"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="Browser" Binding="{Binding Browser}" Width="1.1*"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="User / profile" Binding="{Binding Owner}" Width="1.3*"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="Version" Binding="{Binding Version}" Width="0.8*"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="Latest" Binding="{Binding Latest}" Width="0.8*"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="On" Binding="{Binding EnabledText}" Width="40"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="Installed from" Binding="{Binding Source}" Width="1.1*"/>
+                            <DataGridTextColumn IsReadOnly="True" Header="Access" Binding="{Binding Access}" Width="1.3*">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
@@ -484,7 +540,7 @@
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
-                            <DataGridTextColumn Header="Advice" Binding="{Binding Advice}" Width="3*">
+                            <DataGridTextColumn IsReadOnly="True" Header="Advice" Binding="{Binding Advice}" Width="3*">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>

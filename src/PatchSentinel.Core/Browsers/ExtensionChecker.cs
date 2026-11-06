@@ -148,7 +148,8 @@ public static class ExtensionChecker
         }
 
         if (!e.Enabled) e.Advice += " It is currently turned off; remove it if it is no longer needed.";
-        if (e.BlockedByPolicy) { e.Advice = "Blocked by policy: the browser turns it off (Firefox uninstalls it) at the next start and it can't be turned back on. " + e.Advice; e.Concern = Concern.Info; }
+        if (e.PendingRemoval) { e.Advice = "Uninstall requested: the browser removes it when it next starts. " + e.Advice; e.Concern = Concern.Info; }
+        else if (e.BlockedByPolicy) { e.Advice = "Blocked by policy: the browser turns it off (Firefox uninstalls it) at the next start and it can't be turned back on. " + e.Advice; e.Concern = Concern.Info; }
     }
 
     private static void Set(BrowserExtension e, ExtensionStatus s, Concern c, string advice) { e.Status = s; e.Concern = c; e.Advice = advice; }

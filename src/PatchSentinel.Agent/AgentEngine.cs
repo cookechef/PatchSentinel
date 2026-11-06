@@ -300,6 +300,67 @@ internal sealed class AgentEngine
         return id;
     }
 
+    private void SaveLastScan()
+    {
+        try
+        {
+            string json;
+            lock (_gate) { if (_lastScan is null) return; json = JsonSerializer.Serialize(_lastScan, Json.Options); }
+            FileUtil.WriteAllTextAtomic(AppPaths.LastScanFile, json);
+        }
+        catch (Exception ex) { AppLog.Warn($"Could not save the last scan: {ex.Message}"); }
+    }
+
+    private void RecordCompletedRemovals()
+    {
+        foreach (var p in Scanner.LastCompletedRemovals)
+            _tracker.RecordEvent(new HistoryEntry
+            {
+                At = DateTimeOffset.Now, Kind = "Extension", Name = Trunc($"{p.Name} ({p.Browser})", 200), Id = Trunc(p.Id, 100), To = "Uninstalled",
+                Success = true, Message = $"The browser has removed it from every profile, so the uninstall policy was taken off (requested by {p.By} on {p.RequestedAt.LocalDateTime:dd MMM HH:mm}).",
+                Trigger = "Scan",
+            });
+    }
+
+    private async Task<JobInfo> RunBuildActionAsync(Core.Device.BuildCheckRule rule, Core.Device.BuildAction action, string by, CancellationToken ct)
+    {
+        bool ok;
+        string msg;
+        if (action.Kind == "winget")
+        {
+            var winget = WingetClient.TryCreate(isSystem: Platform.IsSystem);
+            if (winget is null) { ok = false; msg = "winget (App Installer) is not available on this device."; }
+            else if (action.WingetId is null || !WingetClient.IsValidId(action.WingetId)) { ok = false; msg = "Invalid package id in the checklist."; }
+            else
+            {
+                var res = await winget.InstallAsync(action.WingetId, ct);
+                ok = res.Success;
+                msg = res.Message;
+            }
+        }
+        else
+        {
+            var exe = Core.Device.BuildActions.FirstExisting(action.Paths);
+            if (exe is null) { ok = false; msg = "The program is not installed (or not in Program Files)."; }
+            else
+            {
+                var res = await ProcessRunner.RunAsync(exe, action.Args ?? "", TimeSpan.FromMinutes(Math.Clamp(action.TimeoutMinutes, 1, 240)), ct);
+                ok = !res.TimedOut && action.OkExitCodes.Contains(res.ExitCode);
+                msg = res.TimedOut ? $"Timed out after {action.TimeoutMinutes} minutes." : $"Finished with exit code {res.ExitCode}{(ok ? "" : " (failed)")}.";
+                var tail = (res.StdOut + res.StdErr).Trim();
+                if (tail.Length > 0) msg += " " + (tail.Length > 400 ? tail[^400..] : tail);
+            }
+        }
+        _tracker.RecordEvent(new HistoryEntry
+        {
+            At = DateTimeOffset.Now, Kind = "Build action", Name = Trunc($"{rule.Step}. {action.Label}", 200), Id = action.WingetId ?? action.Id,
+            Success = ok, Message = Trunc(msg, 1000), Trigger = by,
+        });
+        // Rescan so the checklist shows the new state.
+        try { await ScanAsync(ct); } catch (Exception ex) when (ex is not OperationCanceledException) { AppLog.Warn($"Rescan after build action failed: {ex.Message}"); }
+        return new JobInfo { Success = ok, Message = $"{action.Label}: {msg}" };
+    }
+
     private async Task<PipeResponse> ScanExtensionsForPipeAsync()
     {
         var warnings = new List<string>();
@@ -308,6 +369,7 @@ internal sealed class AgentEngine
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_stopping);
         cts.CancelAfter(TimeSpan.FromMinutes(2));
         var list = await Scanner.ScanExtensionsAsync(s.ExtensionStoreLookup, Platform.IsSystem, warnings, cts.Token);
+        RecordCompletedRemovals();
         lock (_gate)
             if (_lastScan is not null)
             {
@@ -321,6 +383,7 @@ internal sealed class AgentEngine
     private async Task<JobInfo> ScanAsync(CancellationToken ct)
     {
         var result = await Scanner.ScanAsync(_settings, new ScanOptions(), ct);
+        RecordCompletedRemovals();
         if (result.WingetAvailable && !result.Warnings.Any(w => w.StartsWith("winget update check failed", StringComparison.Ordinal)))
             _tracker.Reconcile(result.Updates);
         await FillVendorLinksAsync(ct);
@@ -567,6 +630,111 @@ internal sealed class AgentEngine
                                     if (!r.Unblock) { e.Concern = Core.Rules.Concern.Info; e.Advice = "Blocked by policy: the browser turns it off (Firefox uninstalls it) at the next start and it can't be turned back on. " + e.Advice; }
                                 }
                     return Task.FromResult(ok ? PipeResponse.Success(msg) : PipeResponse.Fail(msg));
+                }
+
+                case Commands.ExtensionAction:
+                {
+                    var r = Payload<ExtensionActionRequest>(req);
+                    if (r is null || string.IsNullOrWhiteSpace(r.Id) || r.Action is not ("block" or "unblock" or "uninstall"))
+                        return Task.FromResult(PipeResponse.Fail("Missing or unknown extension action."));
+                    if (!_settings.Settings.AllowUserRemediation && !caller.IsAdmin)
+                        return Task.FromResult(PipeResponse.Fail("Your administrator has disabled fixes from this device. Ask IT to remove the extension."));
+                    string msg;
+                    var ok = true;
+                    try
+                    {
+                        msg = r.Action switch
+                        {
+                            "block" => Core.Browsers.ExtensionPolicy.Block(r.Browser, r.Id),
+                            "unblock" => Core.Browsers.ExtensionPolicy.Unblock(r.Browser, r.Id),
+                            _ => Core.Browsers.ExtensionPolicy.Uninstall(r.Browser, r.Id, Trunc(r.Name, 200), caller.Name),
+                        };
+                    }
+                    catch (Exception ex) { msg = ex.Message; ok = false; }
+                    _tracker.RecordEvent(new HistoryEntry
+                    {
+                        At = DateTimeOffset.Now, Kind = "Extension", Name = Trunc($"{r.Name} ({r.Browser})", 200), Id = Trunc(r.Id, 100),
+                        To = r.Action switch { "block" => "Blocked", "unblock" => "Unblocked", _ => "Uninstall requested" },
+                        Success = ok, Message = Trunc(msg, 500), Trigger = caller.Name,
+                    });
+                    if (ok)
+                        lock (_gate)
+                            if (_lastScan is not null)
+                                foreach (var e in _lastScan.Extensions.Where(e => e.Browser == r.Browser && e.Id.Equals(r.Id, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    if (r.Action == "uninstall") e.PendingRemoval = true;
+                                    else e.BlockedByPolicy = r.Action == "block";
+                                    if (r.Action == "unblock") e.PendingRemoval = false;
+                                    if (r.Action != "unblock") e.Concern = Core.Rules.Concern.Info;
+                                }
+                    return Task.FromResult(ok ? PipeResponse.Success(msg) : PipeResponse.Fail(msg));
+                }
+
+                case Commands.BuildAction:
+                {
+                    var r = Payload<BuildActionRequest>(req);
+                    if (r is null) return Task.FromResult(PipeResponse.Fail("Missing request."));
+                    if (!_settings.Settings.AllowUserRemediation && !caller.IsAdmin)
+                        return Task.FromResult(PipeResponse.Fail("Your administrator has disabled fixes from this device."));
+                    var catalog = Core.Rules.RuleCatalogLoader.Load(AppPaths.RulesDir, []);
+                    var rule = catalog.BuildChecklist.FirstOrDefault(x => x.Id.Equals(r.CheckId, StringComparison.OrdinalIgnoreCase));
+                    var action = rule?.Actions.FirstOrDefault(x => x.Id.Equals(r.ActionId, StringComparison.OrdinalIgnoreCase));
+                    if (rule is null || action is null || action.Kind is not ("winget" or "run"))
+                        return Task.FromResult(PipeResponse.Fail("That action is not in the build checklist."));
+                    return Task.FromResult(Started(StartBackgroundJob(action.Label, "build-action", c => RunBuildActionAsync(rule, action, caller.Name, c))));
+                }
+
+                case Commands.SetSignoff:
+                {
+                    var r = Payload<SignoffRequest>(req);
+                    if (r is null || string.IsNullOrWhiteSpace(r.CheckId)) return Task.FromResult(PipeResponse.Fail("Missing step."));
+                    Core.Device.BuildCheckResult? check;
+                    lock (_gate) check = _lastScan?.BuildChecks.FirstOrDefault(c => c.Id.Equals(r.CheckId, StringComparison.OrdinalIgnoreCase));
+                    if (check is null) return Task.FromResult(PipeResponse.Fail("That step is not in the current checklist - run a new scan."));
+                    var file = Core.Device.BuildSignoffStore.Load();
+                    Core.Device.BuildSignoff? so = null;
+                    if (r.Status is { } st)
+                    {
+                        so = new Core.Device.BuildSignoff { Status = st, By = caller.Name, At = DateTimeOffset.Now, Note = Trunc(r.Note, 500), StepStatusAtSignoff = check.Status };
+                        file.Steps[check.Id] = so;
+                    }
+                    else file.Steps.Remove(check.Id);
+                    Core.Device.BuildSignoffStore.Save(file);
+                    lock (_gate) check.Signoff = so;
+                    _tracker.RecordEvent(new HistoryEntry
+                    {
+                        At = DateTimeOffset.Now, Kind = "Build check", Name = Trunc($"{check.Step}. {check.Title}", 200), Id = check.Id,
+                        From = Core.Reporting.DeviceReport.StatusText(check.Status),
+                        To = so is null ? "Sign-off cleared" : so.Status == Core.Device.SignoffStatus.Checked ? "Checked" : "Not required",
+                        Success = true, Message = Trunc(r.Note ?? "", 500), Trigger = caller.Name,
+                    });
+                    SaveLastScan();
+                    return Task.FromResult(PipeResponse.Success(so));
+                }
+
+                case Commands.SignOffBuild:
+                {
+                    var r = Payload<SignOffBuildRequest>(req);
+                    List<Core.Device.BuildCheckResult> checks;
+                    lock (_gate) checks = _lastScan?.BuildChecks.ToList() ?? [];
+                    if (checks.Count == 0) return Task.FromResult(PipeResponse.Fail("There is no build checklist yet - run a scan first."));
+                    var h = Core.Device.BuildSignoffStore.Summarise(checks, caller.Name, Trunc(r?.Note, 500));
+                    var file = Core.Device.BuildSignoffStore.Load();
+                    file.Handover = h;
+                    Core.Device.BuildSignoffStore.Save(file);
+                    lock (_gate) if (_lastScan is not null) _lastScan.BuildHandover = h;
+                    _tracker.RecordEvent(new HistoryEntry
+                    {
+                        At = DateTimeOffset.Now, Kind = "Build sign-off", Name = $"Device build for {Environment.MachineName}",
+                        To = h.StepsOutstanding == 0 ? "Complete" : $"{h.StepsOutstanding} outstanding",
+                        Success = h.StepsOutstanding == 0,
+                        Message = Trunc($"{h.StepsOk} OK, {h.StepsSignedOff} signed off, {h.StepsOutstanding} outstanding." +
+                                        (h.Outstanding.Count > 0 ? " Outstanding: " + string.Join("; ", h.Outstanding) + "." : "") +
+                                        (string.IsNullOrWhiteSpace(h.Note) ? "" : " Note: " + h.Note), 1000),
+                        Trigger = caller.Name,
+                    });
+                    SaveLastScan();
+                    return Task.FromResult(PipeResponse.Success(h));
                 }
 
                 case Commands.GetHistory:

@@ -56,7 +56,7 @@ public static class InventoryExporter
 
     public static string ToHtml(IEnumerable<InstalledItem> items, string computer,
         Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null,
-        IReadOnlyCollection<Browsers.BrowserExtension>? extensions = null)
+        IReadOnlyCollection<Browsers.BrowserExtension>? extensions = null, Device.BuildHandover? handover = null)
     {
         static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
         var list = Ordered(items).ToList();
@@ -82,7 +82,7 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
 <h1>{{(device is null ? "Installed software" : "Device and software report")}}</h1>
 <div class="muted">{{E(computer)}} &middot; {{list.Count}} apps &middot; exported {{DateTime.Now:dd MMM yyyy HH:mm}} by PatchSentinel {{E(AppPaths.Version)}}</div>
 """);
-        if (device is not null) sb.Append(DeviceReport.Html(device, checks ?? []));
+        if (device is not null) sb.Append(DeviceReport.Html(device, checks ?? [], handover));
 
         if (review.Count > 0)
         {
@@ -118,7 +118,7 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
 
     public static void WriteXlsx(IEnumerable<InstalledItem> items, string computer, Stream output,
         Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null,
-        IReadOnlyCollection<Browsers.BrowserExtension>? extensions = null)
+        IReadOnlyCollection<Browsers.BrowserExtension>? extensions = null, Device.BuildHandover? handover = null)
     {
         var widths = new[] { 16, 42, 16, 26, 12, 10, 12, 8, 30, 16, 40, 60, 40, 10, 40, 50, 50, 60 };
         var apps = new XSheet { Name = "Installed apps", Columns = Headers.Select((h, i) => (h, widths[i])).ToList() };
@@ -139,7 +139,7 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
 
         var sheets = new List<XSheet>();
         if (device is not null) sheets.Add(DeviceReport.DeviceSheet(device));
-        if (checks is { Count: > 0 }) sheets.Add(DeviceReport.ChecklistSheet(checks));
+        if (checks is { Count: > 0 }) sheets.Add(DeviceReport.ChecklistSheet(checks, handover));
         sheets.Add(apps);
         if (extensions is { Count: > 0 }) sheets.Add(ExtensionExporter.Sheet(extensions, computer));
         WorkbookWriter.Write(output, sheets, $"PatchSentinel - {computer}");

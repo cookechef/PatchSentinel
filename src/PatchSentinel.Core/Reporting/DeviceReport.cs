@@ -65,8 +65,8 @@ public static class DeviceReport
         Add("Network", "Public IP", d.PublicIp);
         foreach (var n in d.Network)
         {
-            Add("Network", n.Alias ?? "Adapter", $"{string.Join(", ", n.IPv4)}{(n.Dhcp ? " (DHCP)" : " (static IP)")} - gateway {string.Join(", ", n.Gateway)} - DNS {string.Join(", ", n.Dns)}{(n.StaticDns ? " (static DNS)" : "")} - MAC {n.Mac}",
-                n.StaticDns ? CheckStatus.Warn : null);
+            Add("Network", n.Alias ?? "Adapter", $"{string.Join(", ", n.IPv4)}{(n.Dhcp ? " (DHCP)" : " (static IP)")} - gateway {string.Join(", ", n.Gateway)} - DNS {string.Join(", ", n.Dns)}{(n.StaticDnsToFix ? " (static DNS)" : n.StaticDns ? " (DNS set by VPN / secure-access client)" : "")} - MAC {n.Mac}",
+                n.StaticDnsToFix ? CheckStatus.Warn : null);
         }
 
         // Security

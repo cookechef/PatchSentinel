@@ -192,9 +192,13 @@ public static class BuildChecklist
 
             case "staticDns":
             {
-                var stat = d.Network.Where(n => n.StaticDns).ToList();
-                return stat.Count == 0 ? R(CheckStatus.Pass, "DNS servers come from DHCP on all connected adapters.")
-                    : R(CheckStatus.Fail, $"Static DNS set on: {string.Join("; ", stat.Select(n => $"{n.Alias} ({string.Join(", ", n.Dns)})"))}.");
+                var fix = d.Network.Where(n => n.StaticDnsToFix).ToList();
+                var ignored = d.Network.Where(n => n.StaticDns && n.StaticDnsExpected).ToList();
+                var note = ignored.Count == 0 ? "" :
+                    $" Ignored {string.Join("; ", ignored.Select(n => $"{n.Alias} ({string.Join(", ", n.Dns)})"))} - set by a VPN / secure-access client or a local DNS resolver, which is expected.";
+                return fix.Count == 0
+                    ? R(CheckStatus.Pass, (ignored.Count == 0 ? "No static DNS: DNS servers come from DHCP on all connected adapters." : "No static DNS on the network adapters.") + note)
+                    : R(CheckStatus.Fail, $"Static DNS set on: {string.Join("; ", fix.Select(n => $"{n.Alias} ({string.Join(", ", n.Dns)})"))}.{note}");
             }
         }
         return R(CheckStatus.Info, $"Unknown built-in check '{rule.Check}'.");

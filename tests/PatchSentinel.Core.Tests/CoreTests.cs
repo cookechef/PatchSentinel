@@ -413,3 +413,20 @@ public class DeviceTests
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Manual, r["bespoke"].Status);
     }
 }
+
+public class StaticDnsTests
+{
+    [Fact]
+    public void Vpn_and_loopback_dns_are_not_flagged()
+    {
+        var rules = RuleCatalogLoader.LoadEmbedded().BuildChecklist.Where(r => r.Id == "static-dns").ToList();
+        var warp = new PatchSentinel.Core.Device.DeviceInfo { Network = [new() { Alias = "Ethernet 3", Description = "Cloudflare WARP Interface Tunnel", Dns = ["127.0.2.2", "127.0.2.3"], StaticDns = true },
+                                                                         new() { Alias = "Wi-Fi", Dns = ["192.168.1.1"], StaticDns = false }] };
+        var r = PatchSentinel.Core.Device.BuildChecklist.Evaluate(rules, warp, [], new DateOnly(2026, 11, 6)).Single();
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Pass, r.Status);
+        Assert.Contains(new[] { r.Detail }, d => d.Contains("Ignored Ethernet 3"));
+
+        var manual = new PatchSentinel.Core.Device.DeviceInfo { Network = [new() { Alias = "Ethernet", Description = "Intel(R) Ethernet Connection I219-LM", Dns = ["8.8.8.8"], StaticDns = true }] };
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, PatchSentinel.Core.Device.BuildChecklist.Evaluate(rules, manual, [], new DateOnly(2026, 11, 6)).Single().Status);
+    }
+}

@@ -96,6 +96,19 @@ public sealed class NetworkAdapterInfo
     public bool Dhcp { get; set; }
     /// <summary>DNS servers typed in by hand on this adapter (rather than from DHCP).</summary>
     public bool StaticDns { get; set; }
+
+    private static readonly System.Text.RegularExpressions.Regex VirtualAdapter = new(
+        @"WARP|Cloudflare|WireGuard|TAP-Windows|OpenVPN|Wintun|Zscaler|Check Point|Fortinet|FortiClient|PANGP|GlobalProtect|AnyConnect|Cisco Secure|" +
+        @"Juniper|Pulse|Ivanti|SonicWall|NetExtender|WatchGuard|Netskope|Tailscale|ZeroTier|NordLynx|Hyper-V|vEthernet|VMware|VirtualBox|Npcap|Loopback",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>Static DNS that is expected: loopback resolvers (127.x / ::1) or a VPN / secure-access / virtual adapter.</summary>
+    public bool StaticDnsExpected =>
+        (Dns.Count > 0 && Dns.All(d => d is not null && (d.StartsWith("127.", StringComparison.Ordinal) || d == "::1")))
+        || VirtualAdapter.IsMatch($"{Alias} {Description}");
+
+    /// <summary>Static DNS a technician should remove (set by hand on a normal network adapter).</summary>
+    public bool StaticDnsToFix => StaticDns && !StaticDnsExpected;
 }
 
 public sealed class SecurityProduct

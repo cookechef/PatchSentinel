@@ -145,16 +145,17 @@ public static class BuildChecklist
 
             case "antivirus":
             {
-                var expected = Find(apps, rule.Patterns);
-                var registered = d.Antivirus.Where(a => a.Enabled == true).Select(a => a.Name).ToList();
-                var rx = rule.Patterns.Count > 0 ? Rx(rule.Patterns) : null;
-                var registeredExpected = rx is null ? [] : registered.Where(n => n is not null && rx.IsMatch(n)).ToList();
-                if (expected.Count > 0 || registeredExpected.Count > 0)
-                    return R(CheckStatus.Pass, $"Installed: {string.Join(", ", expected.Select(e => e.Name).Concat(registeredExpected!).Distinct())}." +
-                                               (registered.Count > 0 ? $" Active in Windows Security: {string.Join(", ", registered)}." : ""));
-                return registered.Count > 0
-                    ? R(CheckStatus.Warn, $"Only {string.Join(", ", registered)} is active; the company antivirus ({string.Join(" or ", rule.Patterns)}) was not found.")
-                    : R(CheckStatus.Fail, "No antivirus is reported as active.");
+                // Report what is protecting the device. Any active antivirus passes (Bitdefender, Microsoft Defender, SentinelOne...).
+                static string Friendly(string? n) => n is null ? "" : n.Replace("Windows Defender", "Microsoft Defender");
+                var active = d.Antivirus.Where(a => a.Enabled == true).Select(a => Friendly(a.Name) + (a.UpToDate == false ? " (definitions out of date)" : "")).Distinct().ToList();
+                var inactive = d.Antivirus.Where(a => a.Enabled != true).Select(a => Friendly(a.Name)).Distinct().ToList();
+                var installed = Find(apps, rule.Patterns).Select(a => a.Name).ToList();
+                if (active.Count > 0)
+                    return R(d.Antivirus.Any(a => a.Enabled == true && a.UpToDate == false) ? CheckStatus.Warn : CheckStatus.Pass,
+                        $"Active: {string.Join(", ", active)}.{(inactive.Count > 0 ? $" Also registered but not active: {string.Join(", ", inactive)}." : "")}");
+                if (installed.Count > 0)
+                    return R(CheckStatus.Pass, $"Installed: {string.Join(", ", installed)}. (Windows Security does not report antivirus status on this edition of Windows.)");
+                return R(CheckStatus.Fail, inactive.Count > 0 ? $"Antivirus is registered but switched off: {string.Join(", ", inactive)}." : "No antivirus is reported as active.");
             }
 
             case "joined":

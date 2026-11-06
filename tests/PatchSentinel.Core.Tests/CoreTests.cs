@@ -397,7 +397,7 @@ public class DeviceTests
             new() { Name = "AteraAgent", Source = ItemSource.Registry },
         };
         var rules = RuleCatalogLoader.LoadEmbedded().BuildChecklist;
-        Assert.True(rules.Count >= 20);
+        Assert.True(rules.Count >= 17);
         var r = PatchSentinel.Core.Device.BuildChecklist.Evaluate(rules, device, apps, new DateOnly(2026, 11, 6)).ToDictionary(x => x.Id);
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["bloatware"].Status);
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Pass, r["windows-update"].Status);
@@ -410,7 +410,8 @@ public class DeviceTests
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Info, r["vpn"].Status);
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Warn, r["setup-account"].Status);
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["static-dns"].Status);
-        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Manual, r["bespoke"].Status);
+        Assert.False(r.ContainsKey("bespoke"));
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["antivirus"].Status);
     }
 }
 
@@ -428,5 +429,18 @@ public class StaticDnsTests
 
         var manual = new PatchSentinel.Core.Device.DeviceInfo { Network = [new() { Alias = "Ethernet", Description = "Intel(R) Ethernet Connection I219-LM", Dns = ["8.8.8.8"], StaticDns = true }] };
         Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, PatchSentinel.Core.Device.BuildChecklist.Evaluate(rules, manual, [], new DateOnly(2026, 11, 6)).Single().Status);
+    }
+}
+
+public class AntivirusCheckTests
+{
+    [Fact]
+    public void Any_active_antivirus_passes()
+    {
+        var rules = RuleCatalogLoader.LoadEmbedded().BuildChecklist.Where(r => r.Id == "antivirus").ToList();
+        var d = new PatchSentinel.Core.Device.DeviceInfo { Antivirus = [new() { Name = "Windows Defender", Enabled = true, UpToDate = true }] };
+        var r = PatchSentinel.Core.Device.BuildChecklist.Evaluate(rules, d, [], new DateOnly(2026, 11, 6)).Single();
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Pass, r.Status);
+        Assert.Equal("Active: Microsoft Defender.", r.Detail);
     }
 }

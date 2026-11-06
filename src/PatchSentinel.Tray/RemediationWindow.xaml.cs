@@ -101,6 +101,17 @@ public partial class RemediationWindow : Window
         }
     }
 
+    /// <summary>
+    /// Lists and read-only text boxes inside a scrolling page swallow the mouse wheel, so the page would not scroll
+    /// while the pointer is over them. The page handles the wheel first instead.
+    /// </summary>
+    private void PageScroll_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer sv || e.Handled) return;
+        sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta / 3.0);
+        e.Handled = true;
+    }
+
     private RemediationAction? Selected =>
         ActionsPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as RemediationAction;
 

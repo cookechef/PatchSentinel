@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.06.3",
+  "catalogVersion": "2026.11.06.4",
   "rules": [
     {
       "id": "dotnet-runtime",
@@ -1394,13 +1394,15 @@
     {
       "step": 8,
       "id": "antivirus",
-      "title": "Antivirus installed through Atera (Bitdefender or SentinelOne)",
+      "title": "Antivirus installed and active",
       "type": "builtin",
       "check": "antivirus",
       "patterns": [
         "Bitdefender",
         "SentinelOne",
-        "Sentinel Agent"
+        "Sentinel Agent",
+        "Microsoft Defender",
+        "Windows Defender"
       ]
     },
     {
@@ -1495,24 +1497,6 @@
         "Microsoft Office (?:Professional|Standard|Home|LTSC|365)",
         "Microsoft Office \\d{4}"
       ]
-    },
-    {
-      "step": 16,
-      "id": "replacement",
-      "title": "Replacement device: review the old machine's applications",
-      "type": "manual"
-    },
-    {
-      "step": 17,
-      "id": "user-apps",
-      "title": "Confirm with the client which applications the user needs",
-      "type": "manual"
-    },
-    {
-      "step": 18,
-      "id": "bespoke",
-      "title": "Install the required bespoke software",
-      "type": "manual"
     },
     {
       "step": 19,

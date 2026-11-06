@@ -8,7 +8,7 @@
             <Button x:Name="ApplyButton" Content="Apply fix" Click="Apply_Click" Style="{DynamicResource Primary}" IsDefault="True"/>
             <Button x:Name="CloseButton" Content="Close" IsCancel="True" Margin="0,0,0,8"/>
         </StackPanel>
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" PreviewMouseWheel="PageScroll_PreviewMouseWheel">
             <StackPanel>
                 <TextBlock x:Name="TitleText" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap"/>
                 <TextBlock x:Name="StatusText" Foreground="{DynamicResource Critical}" Margin="0,2,0,0"/>

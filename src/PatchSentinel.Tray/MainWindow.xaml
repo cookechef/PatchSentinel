@@ -10,7 +10,7 @@
 
         <TabControl x:Name="Tabs" Margin="10" Background="{DynamicResource SurfaceBg}">
             <TabItem Header="Overview" x:Name="OverviewTab">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" PreviewMouseWheel="PageScroll_PreviewMouseWheel">
                     <StackPanel Margin="20">
                         <TextBlock x:Name="HeadlineText" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Text="Checking this device..."/>
                         <TextBlock x:Name="SubheadText" Margin="0,6,0,18" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
@@ -238,7 +238,7 @@
                         <Button Content="Export device report (Excel, HTML or CSV)..." Click="ExportDevice_Click" Style="{DynamicResource Primary}"/>
                         <Button Content="Copy device summary" Click="CopyDeviceSummary_Click"/>
                     </WrapPanel>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PreviewMouseWheel="PageScroll_PreviewMouseWheel">
                         <StackPanel Margin="0,0,8,0">
                             <TextBlock x:Name="DeviceHeadline" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" Text="No device information yet"/>
                             <TextBlock x:Name="DeviceSubhead" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,2,0,12"

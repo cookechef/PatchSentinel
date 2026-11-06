@@ -1,29 +1,77 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.05",
+  "catalogVersion": "2026.11.06",
   "rules": [
     {
       "id": "dotnet-runtime",
       "title": "Microsoft .NET {cycle} Runtime",
       "product": ".NET Runtime (Microsoft.NETCore.App)",
       "category": "Runtime",
-      "match": { "sources": ["DotNetSharedFramework"], "namePattern": "^Microsoft\\.NETCore\\.App$" },
+      "match": {
+        "sources": [
+          "DotNetSharedFramework"
+        ],
+        "namePattern": "^Microsoft\\.NETCore\\.App$"
+      },
       "endOfLifeProduct": "dotnet",
       "checkLatestPatch": true,
       "cycles": [
-        { "cycle": "1.0", "eol": "2019-06-27" },
-        { "cycle": "1.1", "eol": "2019-06-27" },
-        { "cycle": "2.0", "eol": "2018-10-01" },
-        { "cycle": "2.1", "eol": "2021-08-21" },
-        { "cycle": "2.2", "eol": "2019-12-23" },
-        { "cycle": "3.0", "eol": "2020-03-03" },
-        { "cycle": "3.1", "eol": "2022-12-13", "latest": "3.1.32" },
-        { "cycle": "5", "eol": "2022-05-10", "latest": "5.0.17" },
-        { "cycle": "6", "eol": "2024-11-12", "latest": "6.0.36" },
-        { "cycle": "7", "eol": "2024-05-14", "latest": "7.0.20" },
-        { "cycle": "8", "eol": "2026-11-10" },
-        { "cycle": "9", "eol": "2026-11-10" },
-        { "cycle": "10", "eol": "2028-11-14" }
+        {
+          "cycle": "1.0",
+          "eol": "2019-06-27"
+        },
+        {
+          "cycle": "1.1",
+          "eol": "2019-06-27"
+        },
+        {
+          "cycle": "2.0",
+          "eol": "2018-10-01"
+        },
+        {
+          "cycle": "2.1",
+          "eol": "2021-08-21"
+        },
+        {
+          "cycle": "2.2",
+          "eol": "2019-12-23"
+        },
+        {
+          "cycle": "3.0",
+          "eol": "2020-03-03"
+        },
+        {
+          "cycle": "3.1",
+          "eol": "2022-12-13",
+          "latest": "3.1.32"
+        },
+        {
+          "cycle": "5",
+          "eol": "2022-05-10",
+          "latest": "5.0.17"
+        },
+        {
+          "cycle": "6",
+          "eol": "2024-11-12",
+          "latest": "6.0.36"
+        },
+        {
+          "cycle": "7",
+          "eol": "2024-05-14",
+          "latest": "7.0.20"
+        },
+        {
+          "cycle": "8",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "9",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "10",
+          "eol": "2028-11-14"
+        }
       ],
       "wingetIdTemplate": "Microsoft.DotNet.Runtime.{major}",
       "replacement": ".NET 10 Runtime (LTS, supported to November 2028)",
@@ -39,258 +87,555 @@
       "title": "Microsoft ASP.NET Core {cycle} Runtime",
       "product": "ASP.NET Core Runtime (Microsoft.AspNetCore.App)",
       "category": "Runtime",
-      "match": { "sources": ["DotNetSharedFramework"], "namePattern": "^Microsoft\\.AspNetCore\\.(App|All)$" },
+      "match": {
+        "sources": [
+          "DotNetSharedFramework"
+        ],
+        "namePattern": "^Microsoft\\.AspNetCore\\.(App|All)$"
+      },
       "endOfLifeProduct": "dotnet",
       "checkLatestPatch": true,
       "cycles": [
-        { "cycle": "2.1", "eol": "2021-08-21" },
-        { "cycle": "2.2", "eol": "2019-12-23" },
-        { "cycle": "3.0", "eol": "2020-03-03" },
-        { "cycle": "3.1", "eol": "2022-12-13", "latest": "3.1.32" },
-        { "cycle": "5", "eol": "2022-05-10", "latest": "5.0.17" },
-        { "cycle": "6", "eol": "2024-11-12", "latest": "6.0.36" },
-        { "cycle": "7", "eol": "2024-05-14", "latest": "7.0.20" },
-        { "cycle": "8", "eol": "2026-11-10" },
-        { "cycle": "9", "eol": "2026-11-10" },
-        { "cycle": "10", "eol": "2028-11-14" }
+        {
+          "cycle": "2.1",
+          "eol": "2021-08-21"
+        },
+        {
+          "cycle": "2.2",
+          "eol": "2019-12-23"
+        },
+        {
+          "cycle": "3.0",
+          "eol": "2020-03-03"
+        },
+        {
+          "cycle": "3.1",
+          "eol": "2022-12-13",
+          "latest": "3.1.32"
+        },
+        {
+          "cycle": "5",
+          "eol": "2022-05-10",
+          "latest": "5.0.17"
+        },
+        {
+          "cycle": "6",
+          "eol": "2024-11-12",
+          "latest": "6.0.36"
+        },
+        {
+          "cycle": "7",
+          "eol": "2024-05-14",
+          "latest": "7.0.20"
+        },
+        {
+          "cycle": "8",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "9",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "10",
+          "eol": "2028-11-14"
+        }
       ],
       "wingetIdTemplate": "Microsoft.DotNet.AspNetCore.{major}",
       "replacement": "ASP.NET Core 10 Runtime (LTS)",
       "replacementWingetId": "Microsoft.DotNet.AspNetCore.10",
       "advice": "On IIS web servers install the matching Hosting Bundle (winget id Microsoft.DotNet.HostingBundle.10) rather than the plain runtime.",
-      "references": [ "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core" ]
+      "references": [
+        "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core"
+      ]
     },
     {
       "id": "dotnet-desktop",
       "title": "Microsoft Windows Desktop Runtime {cycle}",
       "product": ".NET Desktop Runtime (Microsoft.WindowsDesktop.App)",
       "category": "Runtime",
-      "match": { "sources": ["DotNetSharedFramework"], "namePattern": "^Microsoft\\.WindowsDesktop\\.App$" },
+      "match": {
+        "sources": [
+          "DotNetSharedFramework"
+        ],
+        "namePattern": "^Microsoft\\.WindowsDesktop\\.App$"
+      },
       "endOfLifeProduct": "dotnet",
       "checkLatestPatch": true,
       "cycles": [
-        { "cycle": "3.0", "eol": "2020-03-03" },
-        { "cycle": "3.1", "eol": "2022-12-13", "latest": "3.1.32" },
-        { "cycle": "5", "eol": "2022-05-10", "latest": "5.0.17" },
-        { "cycle": "6", "eol": "2024-11-12", "latest": "6.0.36" },
-        { "cycle": "7", "eol": "2024-05-14", "latest": "7.0.20" },
-        { "cycle": "8", "eol": "2026-11-10" },
-        { "cycle": "9", "eol": "2026-11-10" },
-        { "cycle": "10", "eol": "2028-11-14" }
+        {
+          "cycle": "3.0",
+          "eol": "2020-03-03"
+        },
+        {
+          "cycle": "3.1",
+          "eol": "2022-12-13",
+          "latest": "3.1.32"
+        },
+        {
+          "cycle": "5",
+          "eol": "2022-05-10",
+          "latest": "5.0.17"
+        },
+        {
+          "cycle": "6",
+          "eol": "2024-11-12",
+          "latest": "6.0.36"
+        },
+        {
+          "cycle": "7",
+          "eol": "2024-05-14",
+          "latest": "7.0.20"
+        },
+        {
+          "cycle": "8",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "9",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "10",
+          "eol": "2028-11-14"
+        }
       ],
       "wingetIdTemplate": "Microsoft.DotNet.DesktopRuntime.{major}",
       "replacement": ".NET 10 Desktop Runtime (LTS)",
       "replacementWingetId": "Microsoft.DotNet.DesktopRuntime.10",
-      "references": [ "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core" ]
+      "references": [
+        "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core"
+      ]
     },
     {
       "id": "dotnet-sdk",
       "title": "Microsoft .NET {cycle} SDK",
       "product": ".NET SDK",
       "category": "Developer tools",
-      "match": { "sources": ["DotNetSdk"], "namePattern": "^Microsoft \\.NET SDK$" },
+      "match": {
+        "sources": [
+          "DotNetSdk"
+        ],
+        "namePattern": "^Microsoft \\.NET SDK$"
+      },
       "endOfLifeProduct": "dotnet",
       "checkLatestPatch": false,
       "cycles": [
-        { "cycle": "1.0", "eol": "2019-06-27" },
-        { "cycle": "1.1", "eol": "2019-06-27" },
-        { "cycle": "2.0", "eol": "2018-10-01" },
-        { "cycle": "2.1", "eol": "2021-08-21" },
-        { "cycle": "2.2", "eol": "2019-12-23" },
-        { "cycle": "3.0", "eol": "2020-03-03" },
-        { "cycle": "3.1", "eol": "2022-12-13" },
-        { "cycle": "5", "eol": "2022-05-10" },
-        { "cycle": "6", "eol": "2024-11-12" },
-        { "cycle": "7", "eol": "2024-05-14" },
-        { "cycle": "8", "eol": "2026-11-10" },
-        { "cycle": "9", "eol": "2026-11-10" },
-        { "cycle": "10", "eol": "2028-11-14" }
+        {
+          "cycle": "1.0",
+          "eol": "2019-06-27"
+        },
+        {
+          "cycle": "1.1",
+          "eol": "2019-06-27"
+        },
+        {
+          "cycle": "2.0",
+          "eol": "2018-10-01"
+        },
+        {
+          "cycle": "2.1",
+          "eol": "2021-08-21"
+        },
+        {
+          "cycle": "2.2",
+          "eol": "2019-12-23"
+        },
+        {
+          "cycle": "3.0",
+          "eol": "2020-03-03"
+        },
+        {
+          "cycle": "3.1",
+          "eol": "2022-12-13"
+        },
+        {
+          "cycle": "5",
+          "eol": "2022-05-10"
+        },
+        {
+          "cycle": "6",
+          "eol": "2024-11-12"
+        },
+        {
+          "cycle": "7",
+          "eol": "2024-05-14"
+        },
+        {
+          "cycle": "8",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "9",
+          "eol": "2026-11-10"
+        },
+        {
+          "cycle": "10",
+          "eol": "2028-11-14"
+        }
       ],
       "replacement": ".NET 10 SDK",
       "replacementWingetId": "Microsoft.DotNet.SDK.10",
       "advice": "SDKs are only needed on developer machines. Each SDK also carries its own runtime, so remove old SDKs as well as runtimes.",
-      "references": [ "https://learn.microsoft.com/dotnet/core/additional-tools/uninstall-tool" ]
+      "references": [
+        "https://learn.microsoft.com/dotnet/core/additional-tools/uninstall-tool"
+      ]
     },
     {
       "id": "dotnet-framework",
       "title": "Microsoft .NET Framework {cycle}",
       "product": ".NET Framework",
       "category": "Runtime",
-      "match": { "sources": ["DotNetFramework"], "namePattern": "^\\.NET Framework$" },
+      "match": {
+        "sources": [
+          "DotNetFramework"
+        ],
+        "namePattern": "^\\.NET Framework$"
+      },
       "cycles": [
-        { "cycle": "4.5", "eol": "2016-01-12" },
-        { "cycle": "4.5.1", "eol": "2016-01-12" },
-        { "cycle": "4.5.2", "eol": "2022-04-26" },
-        { "cycle": "4.6", "eol": "2022-04-26" },
-        { "cycle": "4.6.1", "eol": "2022-04-26" },
-        { "cycle": "4.6.2", "eol": "false" },
-        { "cycle": "4.7", "eol": "false" },
-        { "cycle": "4.7.1", "eol": "false" },
-        { "cycle": "4.7.2", "eol": "false" },
-        { "cycle": "4.8", "eol": "false" },
-        { "cycle": "4.8.1", "eol": "false" }
+        {
+          "cycle": "4.5",
+          "eol": "2016-01-12"
+        },
+        {
+          "cycle": "4.5.1",
+          "eol": "2016-01-12"
+        },
+        {
+          "cycle": "4.5.2",
+          "eol": "2022-04-26"
+        },
+        {
+          "cycle": "4.6",
+          "eol": "2022-04-26"
+        },
+        {
+          "cycle": "4.6.1",
+          "eol": "2022-04-26"
+        },
+        {
+          "cycle": "4.6.2",
+          "eol": "false"
+        },
+        {
+          "cycle": "4.7",
+          "eol": "false"
+        },
+        {
+          "cycle": "4.7.1",
+          "eol": "false"
+        },
+        {
+          "cycle": "4.7.2",
+          "eol": "false"
+        },
+        {
+          "cycle": "4.8",
+          "eol": "false"
+        },
+        {
+          "cycle": "4.8.1",
+          "eol": "false"
+        }
       ],
       "advice": ".NET Framework 4.x is updated in place. Install .NET Framework 4.8.1 (or 4.8) through Windows Update or your RMM; existing 4.x apps keep working.",
-      "references": [ "https://learn.microsoft.com/lifecycle/products/microsoft-net-framework" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/products/microsoft-net-framework"
+      ]
     },
     {
       "id": "access-database-engine-2010",
       "title": "Microsoft Access Database Engine 2010",
       "product": "Microsoft Access Database Engine 2010",
       "category": "Runtime",
-      "match": { "namePattern": "^Microsoft Access database engine 2010" },
+      "match": {
+        "namePattern": "^Microsoft Access database engine 2010"
+      },
       "eol": "2020-10-13",
       "eolSeverity": "High",
       "replacement": "Microsoft 365 Access Runtime",
       "advice": "Usually installed by an application that reads Access or Excel files (ACE OLE DB / ODBC). Confirm which app needs it and ask the vendor which supported driver to use, typically the Microsoft 365 Access Runtime.",
-      "references": [ "https://learn.microsoft.com/lifecycle/products/microsoft-office-2010" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/products/microsoft-office-2010"
+      ]
     },
     {
       "id": "access-database-engine-2016",
       "title": "Microsoft Access Database Engine 2016",
       "product": "Microsoft Access Database Engine 2016",
       "category": "Runtime",
-      "match": { "namePattern": "^Microsoft Access database engine 2016" },
+      "match": {
+        "namePattern": "^Microsoft Access database engine 2016"
+      },
       "eol": "2025-10-14",
       "eolSeverity": "High",
       "replacement": "Microsoft 365 Access Runtime",
       "advice": "Support ended with Office 2016 on 14 October 2025. It is normally installed by an app that imports Access or Excel data. Check with that vendor, then replace it with the Microsoft 365 Access Runtime (same ACE OLE DB / ODBC drivers) and remove the 2016 engine.",
-      "references": [ "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025"
+      ]
     },
     {
       "id": "office-2013",
       "title": "Microsoft Office 2013",
       "product": "Microsoft Office 2013",
       "category": "Application",
-      "match": { "namePattern": "^Microsoft Office .*\\b2013\\b", "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)" },
+      "match": {
+        "namePattern": "^Microsoft Office .*\\b2013\\b",
+        "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)"
+      },
       "eol": "2023-04-11",
       "advice": "Move to Microsoft 365 Apps or a supported Office LTSC release.",
-      "references": [ "https://learn.microsoft.com/lifecycle/products/microsoft-office-2013" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/products/microsoft-office-2013"
+      ]
     },
     {
       "id": "office-2016",
       "title": "Microsoft Office 2016",
       "product": "Microsoft Office 2016",
       "category": "Application",
-      "match": { "namePattern": "^Microsoft Office .*\\b2016\\b", "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)" },
+      "match": {
+        "namePattern": "^Microsoft Office .*\\b2016\\b",
+        "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)"
+      },
       "eol": "2025-10-14",
       "advice": "Office 2016 reached end of support on 14 October 2025. Move to Microsoft 365 Apps or Office LTSC 2024.",
-      "references": [ "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025"
+      ]
     },
     {
       "id": "office-2019",
       "title": "Microsoft Office 2019",
       "product": "Microsoft Office 2019",
       "category": "Application",
-      "match": { "namePattern": "^Microsoft Office .*\\b2019\\b", "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)" },
+      "match": {
+        "namePattern": "^Microsoft Office .*\\b2019\\b",
+        "excludePattern": "(Access database engine|Runtime|Proofing|Language|MUI|Shared|Validation)"
+      },
       "eol": "2025-10-14",
       "advice": "Office 2019 reached end of support on 14 October 2025. Move to Microsoft 365 Apps or Office LTSC 2024.",
-      "references": [ "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/end-of-support/end-of-support-2025"
+      ]
     },
     {
       "id": "vcredist-legacy",
       "title": "Microsoft Visual C++ {cycle} Redistributable",
       "product": "Microsoft Visual C++ Redistributable",
       "category": "Runtime",
-      "match": { "namePattern": "^Microsoft Visual C\\+\\+ (2005|2008|2010|2012|2013) .*Redistributable", "versionFromName": true },
+      "match": {
+        "namePattern": "^Microsoft Visual C\\+\\+ (2005|2008|2010|2012|2013) .*Redistributable",
+        "versionFromName": true
+      },
       "cycles": [
-        { "cycle": "2005", "eol": "2016-04-12" },
-        { "cycle": "2008", "eol": "2018-04-10" },
-        { "cycle": "2010", "eol": "2020-07-14" },
-        { "cycle": "2012", "eol": "2023-01-10" },
-        { "cycle": "2013", "eol": "2024-04-09" }
+        {
+          "cycle": "2005",
+          "eol": "2016-04-12"
+        },
+        {
+          "cycle": "2008",
+          "eol": "2018-04-10"
+        },
+        {
+          "cycle": "2010",
+          "eol": "2020-07-14"
+        },
+        {
+          "cycle": "2012",
+          "eol": "2023-01-10"
+        },
+        {
+          "cycle": "2013",
+          "eol": "2024-04-09"
+        }
       ],
       "eolSeverity": "High",
       "advice": "These are installed by older applications, and the current Visual C++ 2015-2022 package does not replace them. Check which apps use the old version (or test by removing it on one device first) before removing it across the estate.",
-      "references": [ "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist" ]
+      "references": [
+        "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist"
+      ]
     },
     {
       "id": "python",
       "title": "Python {cycle}",
       "product": "Python",
       "category": "Runtime",
-      "match": { "namePattern": "^Python \\d+\\.\\d+\\.\\d+ \\((32|64)-bit\\)$", "versionFromName": true },
+      "match": {
+        "namePattern": "^Python \\d+\\.\\d+\\.\\d+ \\((32|64)-bit\\)$",
+        "versionFromName": true
+      },
       "endOfLifeProduct": "python",
       "checkLatestPatch": true,
       "cycles": [
-        { "cycle": "2.7", "eol": "2020-01-01" },
-        { "cycle": "3.5", "eol": "2020-09-13" },
-        { "cycle": "3.6", "eol": "2021-12-23" },
-        { "cycle": "3.7", "eol": "2023-06-27" },
-        { "cycle": "3.8", "eol": "2024-10-07" },
-        { "cycle": "3.9", "eol": "2025-10-31" },
-        { "cycle": "3.10", "eol": "2026-10-31" },
-        { "cycle": "3.11", "eol": "2027-10-31" },
-        { "cycle": "3.12", "eol": "2028-10-31" },
-        { "cycle": "3.13", "eol": "2029-10-31" }
+        {
+          "cycle": "2.7",
+          "eol": "2020-01-01"
+        },
+        {
+          "cycle": "3.5",
+          "eol": "2020-09-13"
+        },
+        {
+          "cycle": "3.6",
+          "eol": "2021-12-23"
+        },
+        {
+          "cycle": "3.7",
+          "eol": "2023-06-27"
+        },
+        {
+          "cycle": "3.8",
+          "eol": "2024-10-07"
+        },
+        {
+          "cycle": "3.9",
+          "eol": "2025-10-31"
+        },
+        {
+          "cycle": "3.10",
+          "eol": "2026-10-31"
+        },
+        {
+          "cycle": "3.11",
+          "eol": "2027-10-31"
+        },
+        {
+          "cycle": "3.12",
+          "eol": "2028-10-31"
+        },
+        {
+          "cycle": "3.13",
+          "eol": "2029-10-31"
+        }
       ],
       "outdatedSeverity": "Medium",
       "wingetIdTemplate": "Python.Python.{major}.{minor}",
       "replacement": "Python 3.13",
       "replacementWingetId": "Python.Python.3.13",
-      "references": [ "https://devguide.python.org/versions/" ]
+      "references": [
+        "https://devguide.python.org/versions/"
+      ]
     },
     {
       "id": "nodejs",
       "title": "Node.js {cycle}",
       "product": "Node.js",
       "category": "Runtime",
-      "match": { "namePattern": "^Node\\.js$" },
+      "match": {
+        "namePattern": "^Node\\.js$"
+      },
       "endOfLifeProduct": "nodejs",
       "checkLatestPatch": true,
       "cycles": [
-        { "cycle": "12", "eol": "2022-04-30" },
-        { "cycle": "14", "eol": "2023-04-30" },
-        { "cycle": "16", "eol": "2023-09-11" },
-        { "cycle": "18", "eol": "2025-04-30" },
-        { "cycle": "20", "eol": "2026-04-30" },
-        { "cycle": "22", "eol": "2027-04-30" },
-        { "cycle": "24", "eol": "2028-04-30" }
+        {
+          "cycle": "12",
+          "eol": "2022-04-30"
+        },
+        {
+          "cycle": "14",
+          "eol": "2023-04-30"
+        },
+        {
+          "cycle": "16",
+          "eol": "2023-09-11"
+        },
+        {
+          "cycle": "18",
+          "eol": "2025-04-30"
+        },
+        {
+          "cycle": "20",
+          "eol": "2026-04-30"
+        },
+        {
+          "cycle": "22",
+          "eol": "2027-04-30"
+        },
+        {
+          "cycle": "24",
+          "eol": "2028-04-30"
+        }
       ],
       "replacement": "Node.js LTS",
       "replacementWingetId": "OpenJS.NodeJS.LTS",
-      "references": [ "https://nodejs.org/en/about/previous-releases" ]
+      "references": [
+        "https://nodejs.org/en/about/previous-releases"
+      ]
     },
     {
       "id": "powershell",
       "title": "PowerShell {cycle}",
       "product": "PowerShell 7",
       "category": "Runtime",
-      "match": { "namePattern": "^PowerShell 7(\\.\\d+)*-(x64|x86|arm64)$" },
+      "match": {
+        "namePattern": "^PowerShell 7(\\.\\d+)*-(x64|x86|arm64)$"
+      },
       "endOfLifeProduct": "powershell",
       "checkLatestPatch": true,
       "cycles": [
-        { "cycle": "7.0", "eol": "2022-12-03" },
-        { "cycle": "7.1", "eol": "2022-05-08" },
-        { "cycle": "7.2", "eol": "2024-11-08" },
-        { "cycle": "7.3", "eol": "2024-05-08" },
-        { "cycle": "7.4", "eol": "2026-11-10" }
+        {
+          "cycle": "7.0",
+          "eol": "2022-12-03"
+        },
+        {
+          "cycle": "7.1",
+          "eol": "2022-05-08"
+        },
+        {
+          "cycle": "7.2",
+          "eol": "2024-11-08"
+        },
+        {
+          "cycle": "7.3",
+          "eol": "2024-05-08"
+        },
+        {
+          "cycle": "7.4",
+          "eol": "2026-11-10"
+        }
       ],
       "wingetIdTemplate": "Microsoft.PowerShell",
       "replacement": "PowerShell 7.6 (LTS)",
       "replacementWingetId": "Microsoft.PowerShell",
       "advice": "PowerShell 7 follows the lifecycle of the .NET release it is built on. Windows PowerShell 5.1 is part of Windows and is not affected.",
-      "references": [ "https://learn.microsoft.com/powershell/scripting/install/powershell-support-lifecycle" ]
+      "references": [
+        "https://learn.microsoft.com/powershell/scripting/install/powershell-support-lifecycle"
+      ]
     },
     {
       "id": "java-legacy",
       "title": "Java SE {cycle}",
       "product": "Oracle Java SE",
       "category": "Runtime",
-      "match": { "namePattern": "^Java(\\(TM\\))? (6|7) Update \\d+", "versionFromName": true },
+      "match": {
+        "namePattern": "^Java(\\(TM\\))? (6|7) Update \\d+",
+        "versionFromName": true
+      },
       "cycles": [
-        { "cycle": "6", "eol": "2018-12-31" },
-        { "cycle": "7", "eol": "2022-07-31" }
+        {
+          "cycle": "6",
+          "eol": "2018-12-31"
+        },
+        {
+          "cycle": "7",
+          "eol": "2022-07-31"
+        }
       ],
       "advice": "Remove Java 6/7. If an app needs Java, use a supported build such as Eclipse Temurin or Microsoft Build of OpenJDK.",
-      "references": [ "https://www.oracle.com/java/technologies/java-se-support-roadmap.html" ]
+      "references": [
+        "https://www.oracle.com/java/technologies/java-se-support-roadmap.html"
+      ]
     },
     {
       "id": "adobe-flash",
       "title": "Adobe Flash Player",
       "product": "Adobe Flash Player",
       "category": "Plug-in",
-      "match": { "namePattern": "^Adobe Flash Player" },
+      "match": {
+        "namePattern": "^Adobe Flash Player"
+      },
       "eol": "2020-12-31",
       "advice": "Flash is dead and blocked by browsers. Remove it."
     },
@@ -299,7 +644,9 @@
       "title": "Microsoft Silverlight",
       "product": "Microsoft Silverlight",
       "category": "Plug-in",
-      "match": { "namePattern": "^Microsoft Silverlight" },
+      "match": {
+        "namePattern": "^Microsoft Silverlight"
+      },
       "eol": "2021-10-12",
       "advice": "Silverlight is no longer supported by any current browser. Remove it."
     },
@@ -308,22 +655,41 @@
       "title": "Microsoft SQL Server {cycle}",
       "product": "Microsoft SQL Server",
       "category": "Server",
-      "match": { "namePattern": "^Microsoft SQL Server (2005|2008|2008 R2|2012|2014) \\((32|64)-bit\\)$", "versionFromName": true },
+      "match": {
+        "namePattern": "^Microsoft SQL Server (2005|2008|2008 R2|2012|2014) \\((32|64)-bit\\)$",
+        "versionFromName": true
+      },
       "cycles": [
-        { "cycle": "2005", "eol": "2016-04-12" },
-        { "cycle": "2008", "eol": "2019-07-09" },
-        { "cycle": "2012", "eol": "2022-07-12" },
-        { "cycle": "2014", "eol": "2024-07-09" }
+        {
+          "cycle": "2005",
+          "eol": "2016-04-12"
+        },
+        {
+          "cycle": "2008",
+          "eol": "2019-07-09"
+        },
+        {
+          "cycle": "2012",
+          "eol": "2022-07-12"
+        },
+        {
+          "cycle": "2014",
+          "eol": "2024-07-09"
+        }
       ],
       "advice": "Migrate the databases to a supported SQL Server version (or Azure SQL) before uninstalling. Many line-of-business apps ship SQL Server Express; check with the vendor.",
-      "references": [ "https://learn.microsoft.com/lifecycle/products/?terms=sql%20server" ]
+      "references": [
+        "https://learn.microsoft.com/lifecycle/products/?terms=sql%20server"
+      ]
     },
     {
       "id": "adobe-reader-xi",
       "title": "Adobe Reader / Acrobat XI",
       "product": "Adobe Acrobat XI",
       "category": "Application",
-      "match": { "namePattern": "^Adobe (Reader|Acrobat) XI" },
+      "match": {
+        "namePattern": "^Adobe (Reader|Acrobat) XI"
+      },
       "eol": "2017-10-15",
       "replacement": "Adobe Acrobat Reader",
       "replacementWingetId": "Adobe.Acrobat.Reader.64-bit"
@@ -333,14 +699,498 @@
       "title": "Adobe Acrobat {cycle}",
       "product": "Adobe Acrobat (Classic track)",
       "category": "Application",
-      "match": { "namePattern": "^Adobe Acrobat( Reader)? (2015|2017|2020)\\b", "versionFromName": true },
+      "match": {
+        "namePattern": "^Adobe Acrobat( Reader)? (2015|2017|2020)\\b",
+        "versionFromName": true
+      },
       "cycles": [
-        { "cycle": "2015", "eol": "2020-04-07" },
-        { "cycle": "2017", "eol": "2022-06-06" },
-        { "cycle": "2020", "eol": "2025-06-30" }
+        {
+          "cycle": "2015",
+          "eol": "2020-04-07"
+        },
+        {
+          "cycle": "2017",
+          "eol": "2022-06-06"
+        },
+        {
+          "cycle": "2020",
+          "eol": "2025-06-30"
+        }
       ],
       "replacement": "Adobe Acrobat Reader",
       "replacementWingetId": "Adobe.Acrobat.Reader.64-bit"
+    }
+  ],
+  "categories": [
+    {
+      "id": "keylogger-spyware",
+      "category": "Keylogger / covert monitoring",
+      "concern": "High",
+      "purpose": "Records keystrokes, screenshots, messages or browsing, often hidden from the user.",
+      "advisory": "Covert monitoring software is rarely legitimate on business devices and is also used by attackers. Confirm who installed it and why; if it is not an approved, disclosed tool, isolate the device and investigate.",
+      "patterns": [
+        "Refog",
+        "Spyrix",
+        "Revealer Keylogger",
+        "Best Free Keylogger",
+        "Elite Keylogger",
+        "Actual Keylogger",
+        "Ardamax",
+        "SpyAgent",
+        "Spytech",
+        "mSpy",
+        "FlexiSPY",
+        "Kidlogger",
+        "Win Spy",
+        "WebWatcher",
+        "Realtime-Spy",
+        "Keylogger"
+      ]
+    },
+    {
+      "id": "crypto-miner",
+      "category": "Cryptocurrency mining",
+      "concern": "High",
+      "purpose": "Uses the computer's processor or graphics card to mine cryptocurrency.",
+      "advisory": "Mining software on business devices wastes power, wears hardware and is often installed by malware. Remove it unless there is an approved reason.",
+      "patterns": [
+        "NiceHash",
+        "Honeyminer",
+        "Kryptex",
+        "Cudo Miner",
+        "XMRig",
+        "MinerGate",
+        "PhoenixMiner",
+        "T-Rex Miner",
+        "lolMiner",
+        "NBMiner"
+      ]
+    },
+    {
+      "id": "employee-monitoring",
+      "category": "Employee monitoring / time tracking",
+      "concern": "Review",
+      "purpose": "Tracks working time, and depending on the product and settings may record which apps and websites are used, activity levels or screenshots.",
+      "advisory": "Legitimate when approved by the organisation and disclosed to staff, but it collects personal data. Confirm it is company-approved, staff have been told (UK GDPR / ICO monitoring at work guidance), and check what it is configured to capture.",
+      "patterns": [
+        "memtime",
+        "Clockify",
+        "Toggl(?: Track)?",
+        "Hubstaff",
+        "Time Doctor",
+        "ActivTrak",
+        "Teramind",
+        "Veriato",
+        "InterGuard",
+        "Controlio",
+        "DeskTime",
+        "RescueTime",
+        "Workpuls",
+        "StaffCop",
+        "Kickidler",
+        "CleverControl",
+        "Spector",
+        "Work Examiner",
+        "Monitask",
+        "WorkTime",
+        "Sapience",
+        "Desklog",
+        "EmpMonitor",
+        "Traqq",
+        "ManicTime",
+        "TimeCamp",
+        "Harvest",
+        "WebWork Tracker",
+        "Apploye",
+        "Time Champ",
+        "Prohance",
+        "BrowseReporter",
+        "CurrentWare",
+        "Qustodio",
+        "Net Nanny",
+        "Norton Family"
+      ]
+    },
+    {
+      "id": "remote-access",
+      "category": "Remote access / remote control",
+      "concern": "Review",
+      "purpose": "Lets someone view and control this computer over the internet.",
+      "advisory": "Remote access tools are a common way in for attackers and are often abused in support scams. Make sure each one is approved, is the version your IT provider uses, has MFA and access logging enabled, and is not a personal install. For Cyber Essentials, unapproved remote access software should be removed.",
+      "patterns": [
+        "ScreenConnect",
+        "ConnectWise Control",
+        "TeamViewer",
+        "AnyDesk",
+        "Splashtop",
+        "RustDesk",
+        "LogMeIn",
+        "GoTo Resolve",
+        "GoToAssist",
+        "GoTo Opener",
+        "RemotePC",
+        "Chrome Remote Desktop",
+        "RealVNC",
+        "VNC (?:Server|Viewer|Connect)",
+        "TightVNC",
+        "UltraVNC",
+        "TigerVNC",
+        "Radmin",
+        "Supremo",
+        "DWService",
+        "DWAgent",
+        "Zoho Assist",
+        "BeyondTrust",
+        "Bomgar",
+        "Parsec",
+        "Ammyy",
+        "NoMachine",
+        "Remote Utilities",
+        "AeroAdmin",
+        "HopToDesk",
+        "Getscreen",
+        "ISL Light",
+        "Iperius Remote",
+        "ShowMyPC",
+        "Mikogo",
+        "Dameware",
+        "Take Control",
+        "N-able Take Control",
+        "MeshAgent",
+        "MeshCentral",
+        "Quick Assist"
+      ]
+    },
+    {
+      "id": "network-scanner",
+      "category": "Network scanning / security testing tool",
+      "concern": "Review",
+      "purpose": "Discovers devices and open ports on the network, or captures and tests network traffic.",
+      "advisory": "Useful for IT staff, but these are also among the first tools attackers and ransomware groups run after getting in. They should only be on IT or admin devices, not general user machines.",
+      "patterns": [
+        "Advanced IP Scanner",
+        "Advanced Port Scanner",
+        "Angry IP Scanner",
+        "Nmap",
+        "Zenmap",
+        "Wireshark",
+        "Npcap",
+        "WinPcap",
+        "SoftPerfect Network Scanner",
+        "NetScan",
+        "Lansweeper",
+        "Metasploit",
+        "Burp Suite",
+        "Cain",
+        "Fiddler",
+        "Mimikatz",
+        "Hashcat",
+        "John the Ripper",
+        "Nessus",
+        "OpenVAS",
+        "Masscan"
+      ],
+      "excludePatterns": [
+        "Lansweeper Agent"
+      ]
+    },
+    {
+      "id": "p2p",
+      "category": "Peer-to-peer / torrent",
+      "concern": "Review",
+      "purpose": "Downloads and shares files directly with other internet users.",
+      "advisory": "Peer-to-peer clients are a common source of malware and pirated content, can expose files on the device and use a lot of bandwidth. Remove unless there is an approved business use.",
+      "patterns": [
+        "uTorrent",
+        "µTorrent",
+        "BitTorrent",
+        "qBittorrent",
+        "Deluge",
+        "Transmission",
+        "Vuze",
+        "Azureus",
+        "eMule",
+        "LimeWire",
+        "FrostWire",
+        "BitComet",
+        "Tixati",
+        "BiglyBT",
+        "WebTorrent",
+        "Soulseek"
+      ]
+    },
+    {
+      "id": "pup",
+      "category": "Potentially unwanted / bundled software",
+      "concern": "Review",
+      "purpose": "Driver updaters, 'PC optimisers' and toolbars, often installed alongside other software.",
+      "advisory": "These rarely add value, sometimes install outdated or wrong drivers, show adverts or collect data, and some are flagged by security tools as potentially unwanted. Drivers should come from Windows Update or the hardware vendor. Consider removing.",
+      "patterns": [
+        "Avast Driver Updater",
+        "AVG Driver Updater",
+        "Driver Booster",
+        "Driver Easy",
+        "DriverMax",
+        "Driver Reviver",
+        "DriverPack",
+        "Driver Support",
+        "Smart Driver Care",
+        "Outbyte",
+        "PC Optimizer",
+        "Advanced SystemCare",
+        "IObit Uninstaller",
+        "Smart Defrag",
+        "Reimage",
+        "Restoro",
+        "Fortect",
+        "Segurazo",
+        "SAntivirus",
+        "Web Companion",
+        "ByteFence",
+        "Wave Browser",
+        "OneLaunch",
+        "Shift Browser",
+        "PC App Store",
+        "PDF ?Wizard",
+        "Avast Cleanup",
+        "AVG TuneUp",
+        "Avast SecureLine",
+        "McAfee WebAdvisor",
+        "Norton Safe Web",
+        "Ask Toolbar",
+        "Yahoo Toolbar",
+        "Conduit",
+        "Babylon",
+        "MyPC Backup",
+        "WinZip Driver Updater",
+        "Total PC Cleaner",
+        "Wise Care 365",
+        "Glary Utilities",
+        "Auslogics BoostSpeed"
+      ]
+    },
+    {
+      "id": "personal-vpn",
+      "category": "Consumer VPN / anonymiser",
+      "concern": "Review",
+      "purpose": "Routes internet traffic through a third-party service, hiding it from the local network.",
+      "advisory": "Personal VPNs and anonymisers can bypass company web filtering, logging and security monitoring. Business VPN clients your IT provider supplies are fine; personal ones should be approved or removed.",
+      "patterns": [
+        "NordVPN",
+        "ExpressVPN",
+        "Surfshark",
+        "CyberGhost",
+        "Private Internet Access",
+        "PIA VPN",
+        "Hotspot Shield",
+        "Windscribe",
+        "TunnelBear",
+        "IPVanish",
+        "Mullvad",
+        "Hide\\.me",
+        "Psiphon",
+        "Tor Browser",
+        "Ultrasurf",
+        "Hola",
+        "Urban VPN",
+        "Betternet",
+        "VyprVPN",
+        "PureVPN",
+        "Atlas VPN",
+        "Avast SecureLine VPN",
+        "Proton ?VPN"
+      ]
+    },
+    {
+      "id": "rmm-agent",
+      "category": "IT management agent (RMM)",
+      "concern": "Info",
+      "purpose": "Lets an IT provider monitor, patch and support this device remotely.",
+      "advisory": "Normal on managed devices. Check it belongs to your own IT provider; an RMM agent from an unknown company gives that company full control of the device.",
+      "patterns": [
+        "AteraAgent",
+        "Atera",
+        "NinjaRMM",
+        "NinjaOne",
+        "N-able",
+        "N-central",
+        "Windows Agent",
+        "Datto RMM",
+        "CentraStage",
+        "Kaseya",
+        "Action1",
+        "ManageEngine",
+        "Desktop Central",
+        "Endpoint Central",
+        "Syncro",
+        "Level Agent",
+        "Tactical RMM",
+        "Pulseway",
+        "ConnectWise Automate",
+        "LabTech",
+        "Intune Management Extension",
+        "Configuration Manager Client",
+        "Lansweeper Agent",
+        "PDQ",
+        "SolarWinds",
+        "Comodo One",
+        "ITarian",
+        "Automox",
+        "Immybot",
+        "SuperOps",
+        "PatchSentinel"
+      ]
+    },
+    {
+      "id": "security",
+      "category": "Security software",
+      "concern": "Info",
+      "purpose": "Antivirus, endpoint protection or other security tooling.",
+      "advisory": "Running two antivirus products together causes conflicts; make sure only your approved product is installed and reporting in. Note: UK and US government guidance has advised against Kaspersky products for sensitive systems, so check your organisation's policy if it is present.",
+      "patterns": [
+        "Sophos",
+        "ESET",
+        "Bitdefender",
+        "Avast (?:Free )?Antivirus",
+        "Avast Premium Security",
+        "AVG (?:Antivirus|Internet Security)",
+        "Kaspersky",
+        "Malwarebytes",
+        "SentinelOne",
+        "Sentinel Agent",
+        "CrowdStrike",
+        "Huntress",
+        "Webroot",
+        "Trend Micro",
+        "McAfee",
+        "Norton (?:Security|360|AntiVirus)",
+        "F-Secure",
+        "WithSecure",
+        "Emsisoft",
+        "Cylance",
+        "Carbon Black",
+        "Cortex XDR",
+        "Defender for Endpoint",
+        "BlackFog",
+        "ThreatLocker",
+        "Heimdal",
+        "Avira",
+        "Panda (?:Dome|Free Antivirus|Endpoint)"
+      ]
+    },
+    {
+      "id": "password-manager",
+      "category": "Password manager",
+      "concern": "Info",
+      "purpose": "Stores and fills passwords.",
+      "advisory": "A good thing to have, provided it is the company-approved product and protected with MFA. Personal password vaults on work devices may hold company credentials outside company control.",
+      "patterns": [
+        "Bitwarden",
+        "1Password",
+        "LastPass",
+        "KeePass(?:XC)?",
+        "Keeper",
+        "Dashlane",
+        "RoboForm",
+        "NordPass",
+        "Enpass",
+        "Passbolt",
+        "Zoho Vault"
+      ]
+    },
+    {
+      "id": "cloud-storage",
+      "category": "Cloud storage / file sync",
+      "concern": "Info",
+      "purpose": "Synchronises files with an online storage service.",
+      "advisory": "Fine when it is the company service (for example OneDrive for Business). Personal cloud storage can be used to take company data off the network, so check it is approved.",
+      "patterns": [
+        "Dropbox",
+        "Google Drive",
+        "Box Drive",
+        "Box Sync",
+        "MEGAsync",
+        "MEGA Desktop",
+        "pCloud",
+        "Sync\\.com",
+        "iCloud",
+        "Nextcloud",
+        "ownCloud",
+        "Tresorit",
+        "SugarSync",
+        "IDrive",
+        "Backblaze"
+      ]
+    },
+    {
+      "id": "messaging",
+      "category": "Messaging / chat",
+      "concern": "Info",
+      "purpose": "Instant messaging, calls or community chat.",
+      "advisory": "Consumer messaging apps sit outside company retention and data-loss controls. Make sure business conversations happen on the approved platform.",
+      "patterns": [
+        "WhatsApp",
+        "Telegram",
+        "Signal",
+        "Discord",
+        "Viber",
+        "WeChat",
+        "Skype",
+        "Slack",
+        "Zoom",
+        "Webex"
+      ],
+      "excludePatterns": [
+        "Zoom (?:Outlook|Plugin)"
+      ]
+    },
+    {
+      "id": "file-transfer",
+      "category": "File transfer / FTP client",
+      "concern": "Info",
+      "purpose": "Transfers files to and from servers.",
+      "advisory": "Plain FTP sends passwords unencrypted, and saved site passwords are a common target. Prefer SFTP/FTPS and avoid saving credentials.",
+      "patterns": [
+        "FileZilla",
+        "WinSCP",
+        "Cyberduck",
+        "CoreFTP",
+        "SmartFTP",
+        "FireFTP",
+        "WS_FTP",
+        "PuTTY",
+        "MobaXterm",
+        "Bitvise"
+      ]
+    },
+    {
+      "id": "business-vpn",
+      "category": "VPN client",
+      "concern": "Info",
+      "purpose": "Connects this device to a company or remote network.",
+      "advisory": "VPN clients are a frequent target for attackers and vendors regularly publish critical fixes, so keep them on the latest version and make sure the connection uses MFA.",
+      "patterns": [
+        "Smart VPN",
+        "FortiClient",
+        "OpenVPN",
+        "WireGuard",
+        "Cisco Secure Client",
+        "AnyConnect",
+        "GlobalProtect",
+        "Pulse Secure",
+        "Ivanti Secure Access",
+        "NetExtender",
+        "SonicWall Mobile Connect",
+        "WatchGuard (?:Mobile VPN|SSL VPN)",
+        "Check Point (?:Endpoint Security VPN|Remote Access VPN)",
+        "Zscaler",
+        "Tailscale",
+        "ZeroTier",
+        "NetBird",
+        "Shrew Soft VPN",
+        "TheGreenBow",
+        "NCP Secure"
+      ]
     }
   ]
 }

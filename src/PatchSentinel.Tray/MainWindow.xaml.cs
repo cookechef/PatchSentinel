@@ -46,6 +46,13 @@ public sealed class AppRow : INotifyPropertyChanged
     public string UninstallMethod { get; init; } = "";
     public string UninstallCommand => Item.QuietUninstallString ?? Item.UninstallString ?? "";
     public string? VendorUrl => Item.VendorUrl;
+    public string Category => Item.Classification?.Category ?? "";
+    public string Concern => Item.Classification?.Concern.ToString() ?? "";
+    public int ConcernRank => Item.Classification is { } c ? (int)c.Concern + 1 : 0;
+    public string Purpose => Item.Classification?.Purpose ?? "";
+    public string Advisory => Item.Classification is { } c ? (c.Concern == Core.Rules.Concern.Info ? c.Purpose : c.Advisory) : "";
+    public string AdvisoryText => Item.Classification is { } c ? $"{Name}: {c.Category} ({Core.Reporting.InventoryExporter.ConcernText(c.Concern)}). {c.Purpose} {c.Advisory}" : "";
+    public Visibility CategoryVisibility => Item.Classification is null ? Visibility.Collapsed : Visibility.Visible;
     public bool CanUninstall { get; init; }
 
     public bool Selected
@@ -490,11 +497,13 @@ public partial class MainWindow : Window
             Filter = "HTML report (*.html)|*.html|CSV for Excel (*.csv)|*.csv|JSON (*.json)|*.json",
         };
         if (dlg.ShowDialog(this) != true) return;
+        var report = _scan;
+        if (_inventory.Count > 0) { report = _scan.WithoutInventory(); report.Inventory = _inventory; } // adds the security review section
         var content = Path.GetExtension(dlg.FileName).ToLowerInvariant() switch
         {
-            ".csv" => ReportWriter.ToCsv(_scan),
-            ".json" => ReportWriter.ToJson(_scan),
-            _ => ReportWriter.ToHtml(_scan),
+            ".csv" => ReportWriter.ToCsv(report),
+            ".json" => ReportWriter.ToJson(report),
+            _ => ReportWriter.ToHtml(report),
         };
         File.WriteAllText(dlg.FileName, content);
         StatusBarText.Text = $"Report saved to {dlg.FileName}";
@@ -512,7 +521,7 @@ public partial class MainWindow : Window
             if (_inventory.Count == 0)
             {
                 // Agent not running or no scan yet: read this user's view of the registry directly.
-                _inventory = await Task.Run(() => Core.Inventory.RegistryInventory.Collect(false, Platform.CurrentUserSid, new List<string>()));
+                _inventory = await Task.Run(() => ClassifyLocally(Core.Inventory.RegistryInventory.Collect(false, Platform.CurrentUserSid, new List<string>())));
             }
             _inventoryLoaded = true;
             RenderInventory();
@@ -525,8 +534,10 @@ public partial class MainWindow : Window
         var sid = Platform.CurrentUserSid;
         var showSystem = AppsShowSystem.IsChecked == true;
         var q = AppsSearch.Text.Trim();
+        var reviewOnly = AppsReviewOnly.IsChecked == true;
         _appRows = _inventory
             .Where(i => showSystem || !i.IsSystemComponent)
+            .Where(i => !reviewOnly || i.Classification?.Concern is Core.Rules.Concern.Review or Core.Rules.Concern.High)
             .Where(i => q.Length == 0 || i.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                         || (i.Publisher?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false) || (i.Version?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
             .GroupBy(i => (i.Name, i.Version, i.Scope, i.UserSid)).Select(g => g.First())
@@ -548,7 +559,24 @@ public partial class MainWindow : Window
                 };
             }).ToList();
         AppsGrid.ItemsSource = _appRows;
+        var review = _inventory.Where(i => !i.IsSystemComponent && i.Classification?.Concern is Core.Rules.Concern.Review or Core.Rules.Concern.High)
+                               .GroupBy(i => i.Name).Select(g => g.First()).ToList();
+        ReviewBanner.Visibility = review.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ReviewBannerText.Text = review.Count == 0 ? "" :
+            $"{review.Count} app(s) can monitor users, allow remote control or are otherwise worth checking: " +
+            string.Join(", ", review.Take(8).Select(i => i.Name)) + (review.Count > 8 ? ", ..." : "") +
+            ". Check each one is approved; tick 'Only apps that need a security review' to see the advice.";
         AppsCountText.Text = $"{_appRows.Count} app(s){(q.Length > 0 ? " matching" : "")}";
+    }
+
+    private static List<InstalledItem> ClassifyLocally(List<InstalledItem> items)
+    {
+        try
+        {
+            var catalog = Core.Rules.RuleCatalogLoader.Load(AppPaths.RulesDir, new List<string>());
+            return new Core.Rules.SoftwareClassifier(catalog.Categories).Apply(items);
+        }
+        catch { return items; }
     }
 
     private void AppsSearch_TextChanged(object sender, TextChangedEventArgs e) { if (_inventoryLoaded) RenderInventory(); }
@@ -580,7 +608,7 @@ public partial class MainWindow : Window
             MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Uninstall results", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             await Task.Delay(1500);
             _inventoryLoaded = false;
-            _inventory = await Task.Run(() => Core.Inventory.RegistryInventory.Collect(false, Platform.CurrentUserSid, new List<string>()));
+            _inventory = await Task.Run(() => ClassifyLocally(Core.Inventory.RegistryInventory.Collect(false, Platform.CurrentUserSid, new List<string>())));
             // Prefer the agent's all-users view once its rescan finishes; meanwhile show what this user can see.
             _inventoryLoaded = true;
             RenderInventory();
@@ -595,17 +623,30 @@ public partial class MainWindow : Window
         var dlg = new Microsoft.Win32.SaveFileDialog
         {
             FileName = $"PatchSentinel-installed-apps-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}",
-            Filter = "CSV for Excel (*.csv)|*.csv",
+            Filter = "Excel workbook (*.xlsx)|*.xlsx|HTML report (*.html)|*.html|CSV (*.csv)|*.csv",
         };
         if (dlg.ShowDialog(this) != true) return;
-        static string Csv(string? v) => v is null ? "" : "\"" + v.Replace("\"", "\"\"") + "\"";
-        var lines = new List<string> { "Computer,Name,Version,Publisher,Install date,Size (MB),Installed for,User SID,Architecture,Install location,System component,MSI product code,Uninstall command,Quiet uninstall command,Registry key" };
-        lines.AddRange(_inventory.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).Select(i => string.Join(',',
-            Csv(Environment.MachineName), Csv(i.Name), Csv(i.Version), Csv(i.Publisher), Csv(i.InstallDate?.ToString("yyyy-MM-dd")), Csv(i.SizeMB?.ToString("0.#")),
-            Csv(i.Scope == InstallScope.Machine ? "All users" : "User"), Csv(i.UserSid), Csv(i.Architecture), Csv(i.InstallLocation),
-            Csv(i.IsSystemComponent ? "Yes" : "No"), Csv(i.ProductCode), Csv(i.UninstallString), Csv(i.QuietUninstallString), Csv(i.RegistryKey))));
-        File.WriteAllLines(dlg.FileName, lines);
-        StatusBarText.Text = $"Exported {_inventory.Count} apps to {dlg.FileName}";
+        // Export what is shown (search and filters applied), including hidden components only if they are shown.
+        var items = _appRows.Select(r => r.Item).ToList();
+        try
+        {
+            switch (Path.GetExtension(dlg.FileName).ToLowerInvariant())
+            {
+                case ".html":
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(items, Environment.MachineName));
+                    break;
+                case ".csv":
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToCsv(items, Environment.MachineName), new System.Text.UTF8Encoding(true));
+                    break;
+                default:
+                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(items, Environment.MachineName, f);
+                    break;
+            }
+            StatusBarText.Text = $"Exported {items.Count} apps to {dlg.FileName}";
+            if (MessageBox.Show(this, $"Exported {items.Count} apps. Open the file now?", "Export apps", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
     }
 
     // ---------------- uninstall from App updates ----------------

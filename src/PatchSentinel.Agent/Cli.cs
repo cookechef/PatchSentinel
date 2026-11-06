@@ -34,6 +34,7 @@ internal static class Cli
                 "updates" => await UpdatesAsync(args, cts.Token),
                 "fix" => await FixAsync(args, cts.Token),
                 "uninstall" => await UninstallAsync(args, cts.Token),
+                "inventory" => await InventoryAsync(args, cts.Token),
                 "rules" => await RulesAsync(args, cts.Token),
                 "self-update" => await SelfUpdateAsync(args, cts.Token),
                 "run" => await RunConsoleAsync(cts.Token),
@@ -74,6 +75,10 @@ internal static class Cli
 
           self-update [--check]        Check GitHub for a newer PatchSentinel and install it
             --repo <owner/repo>        Override the repository to update from
+
+          inventory                    List installed apps with category and security advisory
+            --xlsx <file> --html <file> --csv <file>   Export the list
+            --review                   Only show apps that need a security review
 
           uninstall --key <regkey>     Uninstall app(s) by their Add/Remove Programs key (repeatable)
           uninstall --winget-id <id>   Uninstall app(s) with winget (repeatable)
@@ -330,6 +335,26 @@ internal static class Cli
         foreach (var rule in catalog.Rules) Console.WriteLine($"  {rule.Id,-28} {rule.Product}{(rule.Disabled ? " (disabled)" : "")}");
         foreach (var w in warnings) Console.WriteLine($"note: {w}");
         return ExitClean;
+    }
+
+    private static async Task<int> InventoryAsync(string[] args, CancellationToken ct)
+    {
+        var warnings = new List<string>();
+        var catalog = Core.Rules.RuleCatalogLoader.Load(AppPaths.RulesDir, warnings);
+        var items = new Core.Rules.SoftwareClassifier(catalog.Categories, warnings).Apply(
+            Core.Inventory.RegistryInventory.Collect(allLoadedUserHives: Platform.IsSystem, Platform.CurrentUserSid, warnings))
+            .Where(i => !i.IsSystemComponent).ToList();
+        var computer = Environment.MachineName;
+        if (Value(args, "--xlsx") is { } xlsx) { await using var f = File.Create(xlsx); InventoryExporter.WriteXlsx(items, computer, f); }
+        if (Value(args, "--html") is { } html) await File.WriteAllTextAsync(html, InventoryExporter.ToHtml(items, computer), ct);
+        if (Value(args, "--csv") is { } csv) await File.WriteAllTextAsync(csv, InventoryExporter.ToCsv(items, computer), ct);
+
+        var shown = Has(args, "--review") ? items.Where(i => i.Classification?.Concern is Core.Rules.Concern.Review or Core.Rules.Concern.High).ToList() : items;
+        foreach (var i in shown.OrderByDescending(i => i.Classification?.Concern ?? (Core.Rules.Concern)(-1)).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase))
+            Console.WriteLine($"{(i.Classification is { } c ? $"[{InventoryExporter.ConcernText(c.Concern)}] {c.Category}: " : "")}{i.Name} {i.Version}");
+        var review = items.Count(i => i.Classification?.Concern is Core.Rules.Concern.Review or Core.Rules.Concern.High);
+        Console.WriteLine($"{items.Count} apps, {review} need a security review.");
+        return review > 0 ? ExitNeedsAttention : ExitClean;
     }
 
     private static async Task<int> SelfUpdateAsync(string[] args, CancellationToken ct)

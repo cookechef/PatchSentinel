@@ -315,3 +315,31 @@ public class WingetShowTests
         Assert.Equal("https://fw.draytek.com.tw/SmartVPN/Smart_VPN_Client_5.7.3.exe", links.InstallerUrl);
     }
 }
+
+public class SoftwareClassifierTests
+{
+    private static SoftwareClassifier Classifier() => new(RuleCatalogLoader.LoadEmbedded().Categories);
+    private static InstalledItem App(string name, string? publisher = null) => new() { Name = name, Publisher = publisher, Source = ItemSource.Registry };
+
+    [Fact]
+    public void Monitoring_and_remote_access_tools_need_review()
+    {
+        var c = Classifier();
+        Assert.Equal("employee-monitoring", c.Classify(App("memtime 2.1.4"))!.Id);
+        Assert.Equal("employee-monitoring", c.Classify(App("Clockify"))!.Id);
+        Assert.Equal(Concern.Review, c.Classify(App("ScreenConnect Client (1a2b3c)"))!.Concern);
+        Assert.Equal("network-scanner", c.Classify(App("Advanced IP Scanner 2.5.1"))!.Id);
+        Assert.Equal("pup", c.Classify(App("Avast Driver Updater"))!.Id);
+        Assert.Equal("rmm-agent", c.Classify(App("AteraAgent"))!.Id);
+    }
+
+    [Fact]
+    public void Ordinary_apps_are_not_tagged_and_words_must_match_whole()
+    {
+        var c = Classifier();
+        Assert.Null(c.Classify(App("Microsoft Edge")));
+        Assert.Null(c.Classify(App("7-Zip 24.08 (x64)")));
+        Assert.Null(c.Classify(App("ZoomText 2024")));
+        Assert.Equal("messaging", c.Classify(App("Zoom Workplace"))!.Id);
+    }
+}

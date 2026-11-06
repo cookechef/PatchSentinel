@@ -20,6 +20,7 @@ PatchSentinel covers both jobs. It installs app updates with winget on a schedul
 | **Scheduled winget updates** | Daily or weekly at a chosen time, random start delay for fleets, reminder before the run, postpone (limited number of times), and catch-up if the PC was off. |
 | **Manual updates list** | Apps whose automatic update fails twice in a row (e.g. VPN clients with drivers) are flagged as "update manually", skipped by scheduled runs and listed with the error. Each one gets a **Download page** link to the vendor's site (taken from its winget manifest), and you can copy the direct installer link. They leave the list once they're up to date. Framework packages that Windows updates itself (Windows App Runtime, VCLibs and so on) are hidden from the list. |
 | **Installed apps** | A searchable list of everything in Add/Remove Programs for all users: version, publisher, install date, size, scope and uninstall method. You can export it to CSV, copy from it, and tick several apps to uninstall them in one go. Machine-wide uninstalls ask for administrator approval through UAC, so standard users cannot remove software on their own. |
+| **Software purpose and security advisories** | Each installed app is tagged with what it is for (time tracking or employee monitoring, remote access, RMM agent, network scanner, consumer VPN, peer-to-peer, bundled "PC optimiser", keylogger, crypto-miner, security software, password manager, cloud sync and so on) and how much of a concern it is (Info, Review, High), with plain-English advice. For example, memtime and Clockify are flagged as monitoring tools to confirm are approved and disclosed to staff. The categories live in `rules/eol-rules.json` under `categories` and update with the rules. |
 | **History** | Every update, fix and self-update is recorded with versions, result, error and who started it. It can be copied or exported to CSV as patching evidence. |
 | **Exclusions** | Users can tick apps to exclude (wildcards such as `Adobe.*` are supported). Admins can enforce exclusions by policy, which users cannot override. |
 | **EOL / legacy detection** | Reads `dotnet\shared\*` and `dotnet\sdk\*` folders (x64, x86 and arm64) as well as Add/Remove Programs for all users. EOL dates and latest patch versions come from [endoflife.date](https://endoflife.date), with built-in dates as an offline fallback. |
@@ -87,6 +88,8 @@ psentinel scan --html C:\Reports\%COMPUTERNAME%.html --csv C:\Reports\%COMPUTERN
 psentinel updates list
 psentinel updates install --all                  # respects exclusions
 psentinel updates install --id 7zip.7zip --id Notepad++.Notepad++
+psentinel inventory --review                     # apps that need a security review
+psentinel inventory --xlsx C:\Reports\apps.xlsx --html C:\Reports\apps.html
 psentinel uninstall --name "DrayTek Smart VPN Client" --yes
 psentinel uninstall --winget-id DrayTek.SmartVPN --yes
 psentinel fix list                               # findings and their fix ids

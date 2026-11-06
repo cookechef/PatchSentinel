@@ -41,6 +41,8 @@ public sealed record InstalledItem
     public double? SizeMB { get; init; }
     /// <summary>URLInfoAbout / URLUpdateInfo / HelpLink from the uninstall key.</summary>
     public string? VendorUrl { get; init; }
+    /// <summary>What kind of software this is and whether it needs a security review.</summary>
+    public SoftwareClassification? Classification { get; init; }
 
     [JsonIgnore]
     public string Key => $"{Source}|{Name}|{Version}|{Architecture}|{Scope}|{UserSid}|{InstallLocation}";
@@ -162,6 +164,8 @@ public sealed record UpdateCandidate
     [JsonIgnore] public bool Installable => !Excluded && !IdTruncated && !RequiresExplicit;
 }
 
+public sealed record SoftwareClassification(string Id, string Category, string Purpose, Rules.Concern Concern, string Advisory);
+
 public sealed record UpdateResult(string Id, string Name, bool Success, int ExitCode, string Message);
 
 public sealed class ScanCounts
@@ -171,6 +175,8 @@ public sealed class ScanCounts
     public int OutdatedPatch { get; set; }
     public int UpdatesAvailable { get; set; }
     public int UpdatesExcluded { get; set; }
+    /// <summary>Installed apps whose category needs a security review (monitoring, remote access, PUPs...).</summary>
+    public int SoftwareToReview { get; set; }
 }
 
 public sealed class ScanResult
@@ -195,6 +201,7 @@ public sealed class ScanResult
         OutdatedPatch = Findings.Count(f => f.Kind == FindingKind.OutdatedPatch),
         UpdatesAvailable = Updates.Count(u => u.Installable),
         UpdatesExcluded = Updates.Count(u => u.Excluded),
+        SoftwareToReview = Inventory.Count(i => i.Classification?.Concern is Rules.Concern.Review or Rules.Concern.High),
     };
 
     /// <summary>Copy without the (large) inventory, for IPC.</summary>

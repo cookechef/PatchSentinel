@@ -36,6 +36,7 @@ public static class Scanner
             ? await eolProvider.GetAsync(products, opt.AllowNetwork, warnings, ct)
             : new Dictionary<string, List<RuleCycle>>();
 
+        inventory = new SoftwareClassifier(catalog.Categories, warnings).Apply(inventory);
         var findings = RuleEngine.Evaluate(inventory, catalog, online, today, s.NearingEolWarningDays, warnings);
 
         var winget = WingetClient.TryCreate(isSystem);

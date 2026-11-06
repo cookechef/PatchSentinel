@@ -33,11 +33,14 @@ public static class RuleCatalogLoader
     {
         var rules = baseCatalog.Rules.ToDictionary(r => r.Id, StringComparer.OrdinalIgnoreCase);
         foreach (var r in overrides.Rules) rules[r.Id] = r;
+        var cats = baseCatalog.Categories.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+        foreach (var c in overrides.Categories) cats[c.Id] = c;
         return new RuleCatalog
         {
             SchemaVersion = baseCatalog.SchemaVersion,
             CatalogVersion = $"{baseCatalog.CatalogVersion}+local",
             Rules = rules.Values.ToList(),
+            Categories = cats.Values.ToList(),
         };
     }
 
@@ -55,6 +58,11 @@ public static class RuleCatalogLoader
             foreach (var id in new[] { r.ReplacementWingetId, r.WingetIdTemplate })
                 if (id is not null && !Updates.WingetClient.IsValidId(id.Replace("{major}", "1").Replace("{minor}", "0")))
                     throw new InvalidDataException($"Rule '{r.Id}' has an invalid winget id '{id}'.");
+        }
+        foreach (var c in catalog.Categories)
+        {
+            if (string.IsNullOrWhiteSpace(c.Id) || string.IsNullOrWhiteSpace(c.Category)) throw new InvalidDataException("A software category is missing its id or name.");
+            _ = new SoftwareClassifier([c]); // validates the patterns
         }
         return catalog;
     }

@@ -234,16 +234,21 @@
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
                                Text="Everything in Add/Remove Programs for all users on this PC. Tick apps to uninstall them (you will be asked to approve with an administrator account), right-click to copy, or export the list."/>
+                    <Border DockPanel.Dock="Top" x:Name="ReviewBanner" Background="{DynamicResource BannerBg}" BorderBrush="{DynamicResource BannerBorder}" BorderThickness="1"
+                            CornerRadius="6" Padding="10,6" Margin="0,0,0,10" Visibility="Collapsed">
+                        <TextBlock x:Name="ReviewBannerText" TextWrapping="Wrap" Foreground="{DynamicResource Warning}"/>
+                    </Border>
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox x:Name="AppsSearch" Width="260" Padding="3" TextChanged="AppsSearch_TextChanged"/>
+                        <CheckBox x:Name="AppsReviewOnly" Content="Only apps that need a security review" Margin="16,0,0,0" VerticalAlignment="Center" Click="AppsFilter_Click"/>
                         <CheckBox x:Name="AppsShowSystem" Content="Show hidden system components" Margin="16,0,0,0" VerticalAlignment="Center" Click="AppsFilter_Click"/>
                         <TextBlock x:Name="AppsCountText" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
                     </StackPanel>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                         <Button Content="Refresh" Click="RefreshApps_Click"/>
                         <Button x:Name="UninstallAppsButton" Content="Uninstall ticked..." Click="UninstallApps_Click"/>
-                        <Button Content="Export list (CSV)..." Click="ExportApps_Click"/>
+                        <Button Content="Export list (Excel, HTML or CSV)..." Click="ExportApps_Click"/>
                         <TextBlock x:Name="AppsResultText" VerticalAlignment="Center" Margin="8,0,0,8" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"/>
                     </WrapPanel>
                     <DataGrid x:Name="AppsGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" ClipboardCopyMode="IncludeHeader"
@@ -256,6 +261,7 @@
                                 <MenuItem Header="Copy version" Click="CopyColumn_Click" Tag="Version"/>
                                 <MenuItem Header="Copy publisher" Click="CopyColumn_Click" Tag="Publisher"/>
                                 <MenuItem Header="Copy uninstall command" Click="CopyColumn_Click" Tag="UninstallCommand"/>
+                                <MenuItem Header="Copy category and advisory" Click="CopyColumn_Click" Tag="AdvisoryText"/>
                                 <MenuItem Header="Open vendor website" Click="OpenVendorPage_Click"/>
                                 <Separator/>
                                 <MenuItem Header="Uninstall selected..." Click="UninstallSelectedApps_Click"/>
@@ -278,6 +284,41 @@
                             <DataGridTextColumn Header="Installed for" Binding="{Binding Scope}" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Arch" Binding="{Binding Arch}" IsReadOnly="True" Width="50"/>
                             <DataGridTextColumn Header="Uninstall" Binding="{Binding UninstallMethod}" IsReadOnly="True" Width="1.1*"/>
+                            <DataGridTemplateColumn Header="Category" Width="1.6*" SortMemberPath="ConcernRank">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="CatPill" CornerRadius="9" Padding="8,1" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                Background="Transparent" ToolTip="{Binding Purpose}" Visibility="{Binding CategoryVisibility}">
+                                            <TextBlock x:Name="CatPillText" Text="{Binding Category}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Concern}" Value="High">
+                                                <Setter TargetName="CatPill" Property="Background" Value="#B42318"/>
+                                                <Setter TargetName="CatPillText" Property="Foreground" Value="White"/>
+                                                <Setter TargetName="CatPillText" Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Concern}" Value="Review">
+                                                <Setter TargetName="CatPill" Property="Background" Value="#F79009"/>
+                                                <Setter TargetName="CatPillText" Property="Foreground" Value="White"/>
+                                                <Setter TargetName="CatPillText" Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Concern}" Value="Info">
+                                                <Setter TargetName="CatPill" Property="Background" Value="#D1E9FF"/>
+                                                <Setter TargetName="CatPillText" Property="Foreground" Value="#175CD3"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Security advisory" Binding="{Binding Advisory}" IsReadOnly="True" Width="3*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        <Setter Property="ToolTip" Value="{Binding Advisory}"/>
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

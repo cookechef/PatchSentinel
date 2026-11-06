@@ -6,6 +6,26 @@ public sealed class RuleCatalog
     /// <summary>Sortable version, e.g. 2026.11.05. A downloaded catalogue only replaces the built-in one if it is newer.</summary>
     public string CatalogVersion { get; set; } = "0";
     public List<EolRule> Rules { get; set; } = [];
+    /// <summary>What kinds of software are installed and which need a security review (monitoring, remote access...).</summary>
+    public List<SoftwareCategoryRule> Categories { get; set; } = [];
+}
+
+public enum Concern { Info, Review, High }
+
+public sealed class SoftwareCategoryRule
+{
+    public string Id { get; set; } = "";
+    public string Category { get; set; } = "";
+    /// <summary>What this kind of software is for, in plain English.</summary>
+    public string Purpose { get; set; } = "";
+    public Concern Concern { get; set; } = Concern.Info;
+    /// <summary>Why it matters and what to check.</summary>
+    public string Advisory { get; set; } = "";
+    /// <summary>Regex fragments matched (case-insensitively, as whole words) against the display name.</summary>
+    public List<string> Patterns { get; set; } = [];
+    /// <summary>Optional regex fragments matched against the publisher.</summary>
+    public List<string> PublisherPatterns { get; set; } = [];
+    public List<string> ExcludePatterns { get; set; } = [];
 }
 
 public sealed class EolRule

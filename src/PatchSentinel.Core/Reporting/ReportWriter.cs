@@ -60,6 +60,7 @@ ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.smal
 <div class="card"><b class="High">{{c.OutdatedPatch}}</b>Missing security patches</div>
 <div class="card"><b>{{c.UpdatesAvailable}}</b>App updates available</div>
 </div>
+{{(c.SoftwareToReview > 0 ? $"<p class=\"Medium\" style=\"margin-top:14px\"><b>{c.SoftwareToReview}</b> installed app(s) need a security review (monitoring, remote access or similar) - see below.</p>" : "")}}
 """);
 
         sb.Append("<h2>Legacy and end-of-life software</h2>");
@@ -87,6 +88,18 @@ ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.smal
                 if (f.References.Count > 0) sb.Append("<div>" + string.Join(" ", f.References.Select(u => $"<a href=\"{E(u)}\">reference</a>")) + "</div>");
                 sb.Append("</td></tr>");
             }
+            sb.Append("</table>");
+        }
+
+        var review = r.Inventory.Where(i => i.Classification?.Concern is Rules.Concern.Review or Rules.Concern.High)
+                                .OrderByDescending(i => i.Classification!.Concern).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        if (review.Count > 0)
+        {
+            sb.Append($"<h2>Software that needs a security review ({review.Count})</h2>");
+            sb.Append("<table><tr><th>Concern</th><th>Application</th><th>Category</th><th>Advisory</th></tr>");
+            foreach (var i in review)
+                sb.Append($"<tr><td class=\"sev {(i.Classification!.Concern == Rules.Concern.High ? "Critical" : "Medium")}\">{E(InventoryExporter.ConcernText(i.Classification.Concern))}</td>" +
+                          $"<td><b>{E(i.Name)}</b> {E(i.Version)}<div class=\"small muted\">{E(i.Publisher)}</div></td><td>{E(i.Classification.Category)}</td><td class=\"small\">{E(i.Classification.Advisory)}</td></tr>");
             sb.Append("</table>");
         }
 

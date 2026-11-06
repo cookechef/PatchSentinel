@@ -51,6 +51,7 @@ th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);verti
 .sev{font-weight:600;white-space:nowrap}.Critical{color:var(--crit)}.High{color:var(--high)}.Medium{color:var(--med)}.Low,.Info{color:var(--muted)}
 ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.small{font-size:12px}
 @media print{body{background:#fff}.card,table{break-inside:avoid} }
+{{DeviceReport.Css}}
 </style></head><body><main>
 <h1>Legacy software and patch report</h1>
 <div class="muted">{{E(r.ComputerName)}} &middot; {{E(r.OsDescription)}} &middot; scanned {{r.ScannedAt:dd MMM yyyy HH:mm}} as {{E(r.ScanContext)}}</div>
@@ -62,6 +63,8 @@ ul{margin:4px 0;padding-left:18px}.break{color:var(--crit);font-weight:600}.smal
 </div>
 {{(c.SoftwareToReview > 0 ? $"<p class=\"Medium\" style=\"margin-top:14px\"><b>{c.SoftwareToReview}</b> installed app(s) need a security review (monitoring, remote access or similar) - see below.</p>" : "")}}
 """);
+
+        if (r.Device is not null) sb.Append(DeviceReport.Html(r.Device, r.BuildChecks));
 
         sb.Append("<h2>Legacy and end-of-life software</h2>");
         if (r.Findings.Count == 0) sb.Append("<p class=\"Low\">No end-of-life or unpatched runtimes found.</p>");

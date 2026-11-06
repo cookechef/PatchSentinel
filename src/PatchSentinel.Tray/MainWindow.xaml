@@ -40,7 +40,8 @@
                                 </StackPanel>
                             </Border>
                         </UniformGrid>
-                        <TextBlock x:Name="ScheduleSummaryText" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                        <TextBlock x:Name="ScheduleSummaryText" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="DeviceSummaryText" TextWrapping="Wrap" Margin="0,0,0,14"/>
                         <WrapPanel>
                             <Button x:Name="ScanButton" Content="Scan now" Click="ScanNow_Click" Style="{DynamicResource Primary}"/>
                             <Button x:Name="UpdateAllButton" Content="Install app updates now" Click="UpdateAll_Click"/>
@@ -227,6 +228,76 @@
                             <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="1.4*"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Device" x:Name="DeviceTab">
+                <DockPanel Margin="10">
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Content="Refresh (scan now)" Click="ScanNow_Click"/>
+                        <Button Content="Export device report (Excel, HTML or CSV)..." Click="ExportDevice_Click" Style="{DynamicResource Primary}"/>
+                        <Button Content="Copy device summary" Click="CopyDeviceSummary_Click"/>
+                    </WrapPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,0,8,0">
+                            <TextBlock x:Name="DeviceHeadline" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" Text="No device information yet"/>
+                            <TextBlock x:Name="DeviceSubhead" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,2,0,12"
+                                       Text="Device details are collected by the PatchSentinel agent during a scan. Click Refresh (scan now)."/>
+                            <TextBlock Text="Device build checklist" Style="{StaticResource SectionLabel}" FontSize="15" Margin="0,4,0,2"/>
+                            <TextBlock x:Name="ChecklistSummary" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <DataGrid x:Name="ChecklistGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" ClipboardCopyMode="IncludeHeader"
+                                      GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource GridLine}" Background="{DynamicResource SurfaceBg}"
+                                      BorderBrush="{DynamicResource SurfaceBorder}" RowHeaderWidth="0" SelectionMode="Extended" CanUserSortColumns="False">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Copy selected rows" Click="CopyRows_Click"/>
+                                        <MenuItem Header="Copy check and detail" Click="CopyColumn_Click" Tag="CopyText"/>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Step" Binding="{Binding Step}" Width="45"/>
+                                    <DataGridTextColumn Header="Check" Binding="{Binding Title}" Width="2*">
+                                        <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style></DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTemplateColumn Header="Status" Width="115">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="StPill" CornerRadius="9" Padding="9,1" HorizontalAlignment="Left" VerticalAlignment="Center" Background="#E4E7EC">
+                                                    <TextBlock x:Name="StText" Text="{Binding StatusLabel}" FontWeight="SemiBold" FontSize="12"/>
+                                                </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Status}" Value="Pass">
+                                                <Setter TargetName="StPill" Property="Background" Value="#12B76A"/>
+                                                <Setter TargetName="StText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Warn">
+                                                <Setter TargetName="StPill" Property="Background" Value="#F79009"/>
+                                                <Setter TargetName="StText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Fail">
+                                                <Setter TargetName="StPill" Property="Background" Value="#D92D20"/>
+                                                <Setter TargetName="StText" Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Info">
+                                                <Setter TargetName="StPill" Property="Background" Value="#D1E9FF"/>
+                                                <Setter TargetName="StText" Property="Foreground" Value="#175CD3"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Manual">
+                                                <Setter TargetName="StPill" Property="Background" Value="#E4E7EC"/>
+                                                <Setter TargetName="StText" Property="Foreground" Value="#344054"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="4*">
+                                        <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style></DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <WrapPanel x:Name="DeviceSections" Margin="0,16,0,0"/>
+                        </StackPanel>
+                    </ScrollViewer>
                 </DockPanel>
             </TabItem>
 

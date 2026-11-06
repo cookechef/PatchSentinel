@@ -8,6 +8,8 @@ public sealed class RuleCatalog
     public List<EolRule> Rules { get; set; } = [];
     /// <summary>What kinds of software are installed and which need a security review (monitoring, remote access...).</summary>
     public List<SoftwareCategoryRule> Categories { get; set; } = [];
+    /// <summary>Device build checklist (Device tab). Edit it on GitHub to match your build process.</summary>
+    public List<Device.BuildCheckRule> BuildChecklist { get; set; } = [];
 }
 
 public enum Concern { Info, Review, High }

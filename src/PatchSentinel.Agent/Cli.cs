@@ -35,6 +35,7 @@ internal static class Cli
                 "fix" => await FixAsync(args, cts.Token),
                 "uninstall" => await UninstallAsync(args, cts.Token),
                 "inventory" => await InventoryAsync(args, cts.Token),
+                "device" => await DeviceAsync(args, cts.Token),
                 "rules" => await RulesAsync(args, cts.Token),
                 "self-update" => await SelfUpdateAsync(args, cts.Token),
                 "run" => await RunConsoleAsync(cts.Token),
@@ -62,6 +63,7 @@ internal static class Cli
             --no-deps                  Skip the application dependency scan
             --offline                  Do not contact endoflife.date (use built-in/cached dates)
             --inventory                Include the full software inventory in JSON output
+            --no-device                Skip device details and the build checklist
 
           updates list                 List available winget upgrades (exclusions applied)
           updates install --all        Install every non-excluded upgrade
@@ -75,6 +77,10 @@ internal static class Cli
 
           self-update [--check]        Check GitHub for a newer PatchSentinel and install it
             --repo <owner/repo>        Override the repository to update from
+
+          device                       Device details, security status and the build checklist
+            --json | --html <file> | --xlsx <file> | --csv <file>
+            --no-public-ip             Do not look up the public IP address
 
           inventory                    List installed apps with category and security advisory
             --xlsx <file> --html <file> --csv <file>   Export the list
@@ -104,6 +110,7 @@ internal static class Cli
             IncludeUpdates = includeUpdates && !Has(args, "--no-updates"),
             AllowNetwork = !Has(args, "--offline"),
             ScanDependencies = !Has(args, "--no-deps"),
+            CollectDevice = includeUpdates && !Has(args, "--no-device"),
         }, ct);
     }
 
@@ -335,6 +342,41 @@ internal static class Cli
         foreach (var rule in catalog.Rules) Console.WriteLine($"  {rule.Id,-28} {rule.Product}{(rule.Disabled ? " (disabled)" : "")}");
         foreach (var w in warnings) Console.WriteLine($"note: {w}");
         return ExitClean;
+    }
+
+    private static async Task<int> DeviceAsync(string[] args, CancellationToken ct)
+    {
+        var warnings = new List<string>();
+        var catalog = RuleCatalogLoader.Load(AppPaths.RulesDir, warnings);
+        var inventory = new SoftwareClassifier(catalog.Categories, warnings).Apply(
+            Core.Inventory.RegistryInventory.Collect(allLoadedUserHives: Platform.IsSystem, Platform.CurrentUserSid, warnings));
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var device = await Core.Device.DeviceCollector.CollectAsync(inventory, !Has(args, "--no-public-ip"), today, ct);
+        var checks = Core.Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today);
+        var computer = device.ComputerName;
+        var apps = inventory.Where(i => !i.IsSystemComponent).ToList();
+
+        if (Value(args, "--xlsx") is { } xlsx) { await using var f = File.Create(xlsx); InventoryExporter.WriteXlsx(apps, computer, f, device, checks); }
+        if (Value(args, "--html") is { } html) await File.WriteAllTextAsync(html, InventoryExporter.ToHtml(apps, computer, device, checks), ct);
+        if (Value(args, "--csv") is { } csv) await File.WriteAllTextAsync(csv, DeviceReport.ToCsv(device, checks), ct);
+        if (Has(args, "--json"))
+        {
+            Console.WriteLine(JsonSerializer.Serialize(new { device, buildChecks = checks }, Json.Options));
+        }
+        else
+        {
+            foreach (var g in DeviceReport.Rows(device).GroupBy(r => r.Section))
+            {
+                Console.WriteLine();
+                Console.WriteLine(g.Key.ToUpperInvariant());
+                foreach (var r in g) Console.WriteLine($"  {r.Field,-28} {r.Value}{(r.Status is { } s ? $"  [{DeviceReport.StatusText(s)}]" : "")}");
+            }
+            Console.WriteLine();
+            Console.WriteLine("BUILD CHECKLIST");
+            foreach (var c in checks) Console.WriteLine($"  {c.Step,2}. [{DeviceReport.StatusText(c.Status),-13}] {c.Title} - {c.Detail}");
+        }
+        var failed = checks.Count(c => c.Status == Core.Device.CheckStatus.Fail);
+        return failed > 0 ? ExitNeedsAttention : ExitClean;
     }
 
     private static async Task<int> InventoryAsync(string[] args, CancellationToken ct)

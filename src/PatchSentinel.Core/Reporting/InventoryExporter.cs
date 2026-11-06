@@ -37,8 +37,9 @@ public static class InventoryExporter
 
     // ---------------- CSV ----------------
 
-    public static string ToCsv(IEnumerable<InstalledItem> items, string computer)
+    public static string ToCsv(IEnumerable<InstalledItem> items, string computer, Device.DeviceInfo? device = null)
     {
+        if (device is not null) computer = $"{computer}{(string.IsNullOrEmpty(device.SerialNumber) ? "" : $" ({device.SerialNumber})")}";
         static string Q(string? v)
         {
             v ??= "";
@@ -53,7 +54,8 @@ public static class InventoryExporter
 
     // ---------------- HTML ----------------
 
-    public static string ToHtml(IEnumerable<InstalledItem> items, string computer)
+    public static string ToHtml(IEnumerable<InstalledItem> items, string computer,
+        Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null)
     {
         static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
         var list = Ordered(items).ToList();
@@ -74,10 +76,12 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
 .High{background:#fee4e2;color:var(--high)}.Review{background:#fef0c7;color:var(--review)}.Info{background:#eef4ff;color:#3538cd}
 .small{font-size:12px}.adv{max-width:420px}
 @media print{input{display:none}body{background:#fff}th{position:static} }
+{{DeviceReport.Css}}
 </style></head><body><main>
-<h1>Installed software</h1>
+<h1>{{(device is null ? "Installed software" : "Device and software report")}}</h1>
 <div class="muted">{{E(computer)}} &middot; {{list.Count}} apps &middot; exported {{DateTime.Now:dd MMM yyyy HH:mm}} by PatchSentinel {{E(AppPaths.Version)}}</div>
 """);
+        if (device is not null) sb.Append(DeviceReport.Html(device, checks ?? []));
 
         if (review.Count > 0)
         {
@@ -109,77 +113,30 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);verti
 
     // ---------------- Excel (.xlsx) ----------------
 
-    public static void WriteXlsx(IEnumerable<InstalledItem> items, string computer, Stream output)
+    public static void WriteXlsx(IEnumerable<InstalledItem> items, string computer, Stream output,
+        Device.DeviceInfo? device = null, IReadOnlyList<Device.BuildCheckResult>? checks = null)
     {
-        var rows = Ordered(items).ToList();
-        using var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true);
-        void Add(string path, string xml)
-        {
-            var entry = zip.CreateEntry(path, CompressionLevel.Optimal);
-            using var w = new StreamWriter(entry.Open(), new UTF8Encoding(false));
-            w.Write(xml);
-        }
-
-        Add("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>""");
-        Add("_rels/.rels", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>""");
-        Add("docProps/core.xml", $"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Installed software - {X(computer)}</dc:title><dc:creator>PatchSentinel</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ssZ}</dcterms:created></cp:coreProperties>""");
-        Add("xl/workbook.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Installed apps" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'Installed apps'!$A$1:$R$1</definedName></definedNames></workbook>""");
-        Add("xl/_rels/workbook.xml.rels", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>""");
-        // Styles: 0 normal, 1 header (bold white on blue), 2 High (red), 3 Review (amber), 4 wrapped text, 5 number
-        Add("xl/styles.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="0.0"/></numFmts><fonts count="4"><font><sz val="10"/><name val="Segoe UI"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Segoe UI"/></font><font><b/><sz val="10"/><color rgb="FFB42318"/><name val="Segoe UI"/></font><font><b/><sz val="10"/><color rgb="FF93370D"/><name val="Segoe UI"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF005FB8"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFEE4E2"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFEF0C7"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>""");
-
         var widths = new[] { 16, 42, 16, 26, 12, 10, 12, 8, 30, 16, 40, 60, 40, 10, 40, 50, 50, 60 };
-        var sheet = new StringBuilder();
-        sheet.Append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>""");
-        for (var c = 0; c < widths.Length; c++) sheet.Append($"<col min=\"{c + 1}\" max=\"{c + 1}\" width=\"{widths[c]}\" customWidth=\"1\"/>");
-        sheet.Append("</cols><sheetData>");
-
-        sheet.Append("<row r=\"1\">");
-        for (var c = 0; c < Headers.Length; c++) sheet.Append(Cell(c, 1, Headers[c], 1));
-        sheet.Append("</row>");
-
-        var r = 2;
-        foreach (var i in rows)
+        var apps = new XSheet { Name = "Installed apps", Columns = Headers.Select((h, i) => (h, widths[i])).ToList() };
+        foreach (var i in Ordered(items))
         {
-            var values = Row(i, computer);
-            sheet.Append($"<row r=\"{r}\">");
-            for (var c = 0; c < values.Length; c++)
-            {
-                var style = c == 9 ? i.Classification?.Concern switch { Concern.High => 2, Concern.Review => 3, _ => 0 } : c is 10 or 11 ? 4 : 0;
-                if (c == 5 && i.SizeMB is { } mb) sheet.Append($"<c r=\"{Ref(c, r)}\" s=\"5\"><v>{mb.ToString(System.Globalization.CultureInfo.InvariantCulture)}</v></c>");
-                else sheet.Append(Cell(c, r, values[c], style));
-            }
-            sheet.Append("</row>");
-            r++;
+            var v = Row(i, computer);
+            var cells = new XCell[v.Length];
+            for (var c = 0; c < v.Length; c++)
+                cells[c] = c switch
+                {
+                    5 when i.SizeMB is { } mb => new XCell(null, CellStyle.Number, mb),
+                    9 => new XCell(v[c], i.Classification?.Concern switch { Concern.High => CellStyle.Red, Concern.Review => CellStyle.Amber, _ => CellStyle.Normal }),
+                    10 or 11 => new XCell(v[c], CellStyle.Wrap),
+                    _ => new XCell(v[c]),
+                };
+            apps.Rows.Add(cells);
         }
-        sheet.Append($"</sheetData><autoFilter ref=\"A1:{Ref(Headers.Length - 1, Math.Max(1, r - 1))}\"/></worksheet>");
-        Add("xl/worksheets/sheet1.xml", sheet.ToString());
-    }
 
-    private static string Cell(int col, int row, string? value, int style)
-    {
-        if (string.IsNullOrEmpty(value)) return style == 0 ? "" : $"<c r=\"{Ref(col, row)}\" s=\"{style}\"/>";
-        return $"<c r=\"{Ref(col, row)}\" t=\"inlineStr\"{(style == 0 ? "" : $" s=\"{style}\"")}><is><t xml:space=\"preserve\">{X(value)}</t></is></c>";
-    }
-
-    private static string Ref(int col, int row)
-    {
-        var name = "";
-        for (var c = col + 1; c > 0; c = (c - 1) / 26) name = (char)('A' + (c - 1) % 26) + name;
-        return name + row;
-    }
-
-    /// <summary>XML-escapes and drops characters that are not allowed in XML (registry values sometimes contain them).</summary>
-    private static string X(string s)
-    {
-        var sb = new StringBuilder(s.Length);
-        foreach (var ch in s)
-        {
-            if (ch < 0x20 && ch is not '\t' and not '\n' and not '\r') continue;
-            if (char.IsSurrogate(ch)) { sb.Append(ch); continue; }
-            sb.Append(ch switch { '&' => "&amp;", '<' => "&lt;", '>' => "&gt;", '"' => "&quot;", _ => ch.ToString() });
-        }
-        if (sb.Length > 32767) sb.Length = 32767; // Excel cell limit
-        return sb.ToString();
+        var sheets = new List<XSheet>();
+        if (device is not null) sheets.Add(DeviceReport.DeviceSheet(device));
+        if (checks is { Count: > 0 }) sheets.Add(DeviceReport.ChecklistSheet(checks));
+        sheets.Add(apps);
+        WorkbookWriter.Write(output, sheets, $"PatchSentinel - {computer}");
     }
 }

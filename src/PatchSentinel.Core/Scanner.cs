@@ -12,6 +12,7 @@ public sealed class ScanOptions
     public bool IncludeUpdates { get; set; } = true;
     public bool AllowNetwork { get; set; } = true;
     public bool ScanDependencies { get; set; } = true;
+    public bool CollectDevice { get; set; } = true;
     public DateOnly? Today { get; set; }
 }
 
@@ -52,6 +53,15 @@ public static class Scanner
         foreach (var f in findings)
             RemediationPlanner.Plan(f, rulesById.GetValueOrDefault(f.RuleId), inventory, refs, winget is not null);
 
+        Device.DeviceInfo? device = null;
+        var checks = new List<Device.BuildCheckResult>();
+        if (s.CollectDeviceInfo && opt.CollectDevice)
+        {
+            device = await Device.DeviceCollector.CollectAsync(inventory, s.PublicIpLookup && opt.AllowNetwork, today, ct);
+            warnings.AddRange(device.Warnings);
+            if (catalog.BuildChecklist.Count > 0) checks = Device.BuildChecklist.Evaluate(catalog.BuildChecklist, device, inventory, today);
+        }
+
         var updates = new List<UpdateCandidate>();
         if (opt.IncludeUpdates)
         {
@@ -77,6 +87,8 @@ public static class Scanner
             Findings = findings,
             Updates = updates.OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase).ToList(),
             Inventory = inventory,
+            Device = device,
+            BuildChecks = checks,
             Warnings = warnings.Distinct().ToList(),
         };
     }

@@ -359,3 +359,57 @@ public class SoftwareClassifierMoreTests
         Assert.Equal("rmm-agent", c.Classify(App("Action1 Agent"))!.Id);
     }
 }
+
+public class DeviceTests
+{
+    [Fact]
+    public void Cpu_release_year_is_estimated_from_the_model()
+    {
+        Assert.Equal(2020, PatchSentinel.Core.Device.CpuAge.Estimate("11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz").Year);
+        Assert.Equal(2021, PatchSentinel.Core.Device.CpuAge.Estimate("12th Gen Intel(R) Core(TM) i5-1235U").Year);
+        Assert.Equal(2019, PatchSentinel.Core.Device.CpuAge.Estimate("Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz").Year);
+        Assert.Equal(2016, PatchSentinel.Core.Device.CpuAge.Estimate("Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz").Year);
+        Assert.Equal(false, PatchSentinel.Core.Device.CpuAge.Estimate("Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz").Windows11);
+        Assert.Equal(2023, PatchSentinel.Core.Device.CpuAge.Estimate("Intel(R) Core(TM) Ultra 7 155H").Year);
+        Assert.Equal(2021, PatchSentinel.Core.Device.CpuAge.Estimate("AMD Ryzen 5 5600U with Radeon Graphics").Year);
+        Assert.Equal(2020, PatchSentinel.Core.Device.CpuAge.Estimate("AMD Ryzen 7 PRO 4750U with Radeon Graphics").Year);
+        Assert.Null(PatchSentinel.Core.Device.CpuAge.Estimate("Some Unknown CPU").Year);
+    }
+
+    [Fact]
+    public void Build_checklist_flags_missing_tools_and_settings()
+    {
+        var device = new PatchSentinel.Core.Device.DeviceInfo
+        {
+            ComputerName = "PC1", Manufacturer = "Dell Inc.", CpuName = "Intel(R) Core(TM) i5-1235U", EntraJoined = true,
+            LastWindowsUpdate = DateTime.Now.AddDays(-3).ToString("s"),
+            BitLocker = [new() { Drive = "C:", Protection = "Off", IsOsVolume = true }],
+            Network = [new() { Alias = "Ethernet", Dns = ["8.8.8.8"], StaticDns = true }],
+            LocalAccounts = [new() { Name = "setup", Enabled = true, IsAdmin = true }],
+            OemTools = [new() { Vendor = "Dell", Tool = "Dell Command | Update", Applicable = true, Installed = false, DownloadUrl = "x" },
+                        new() { Vendor = "Intel", Tool = "Intel DSA", Applicable = true, Installed = true, InstalledName = "Intel DSA" }],
+        };
+        var apps = new List<InstalledItem>
+        {
+            new() { Name = "McAfee LiveSafe", Source = ItemSource.Registry },
+            new() { Name = "7-Zip 24.08 (x64)", Source = ItemSource.Registry },
+            new() { Name = "Google Chrome", Source = ItemSource.Registry },
+            new() { Name = "AteraAgent", Source = ItemSource.Registry },
+        };
+        var rules = RuleCatalogLoader.LoadEmbedded().BuildChecklist;
+        Assert.True(rules.Count >= 20);
+        var r = PatchSentinel.Core.Device.BuildChecklist.Evaluate(rules, device, apps, new DateOnly(2026, 11, 6)).ToDictionary(x => x.Id);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["bloatware"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Pass, r["windows-update"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["oem-tool"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Warn, r["intel-dsa"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Pass, r["atera"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Pass, r["joined"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["bitlocker"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["standard-apps"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Info, r["vpn"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Warn, r["setup-account"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Fail, r["static-dns"].Status);
+        Assert.Equal(PatchSentinel.Core.Device.CheckStatus.Manual, r["bespoke"].Status);
+    }
+}

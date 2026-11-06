@@ -104,6 +104,10 @@ public sealed class AgentSettings
     public bool AllowUserRemediation { get; set; } = true;
     public bool AllowUserDeferral { get; set; } = true;
     public List<string> ExtraDependencyScanPaths { get; set; } = [];
+    /// <summary>Collect hardware, network and security details for the Device tab.</summary>
+    public bool CollectDeviceInfo { get; set; } = true;
+    /// <summary>Look up the public IP address (one HTTPS request to api.ipify.org).</summary>
+    public bool PublicIpLookup { get; set; } = true;
     public int DependencyScanBudgetSeconds { get; set; } = 90;
 }
 
@@ -162,6 +166,8 @@ public static class PolicyReader
             if (Bool(k, "UseEndOfLifeApi") is { } eol) s.UseEndOfLifeApi = eol;
             if (Bool(k, "AutoUpdateRules") is { } aur2) s.AutoUpdateRules = aur2;
             if (Bool(k, "AutoUpdateAgent") is { } aua) s.AutoUpdateAgent = aua;
+            if (Bool(k, "CollectDeviceInfo") is { } cdi) s.CollectDeviceInfo = cdi;
+            if (Bool(k, "PublicIpLookup") is { } pil) s.PublicIpLookup = pil;
             if (k.GetValue("SelfUpdateMode") is string sum && Enum.TryParse<SelfUpdateMode>(sum, true, out var mode)) s.SelfUpdateMode = mode;
             if (Int(k, "SelfUpdateGraceMinutes") is { } sgm) s.SelfUpdateGraceMinutes = Math.Clamp(sgm, 0, 7 * 24 * 60);
             if (k.GetValue("UpdateRepo") is string repo && repo.Contains('/')) s.UpdateRepo = repo.Trim();

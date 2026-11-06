@@ -177,6 +177,8 @@ public sealed class ScanCounts
     public int UpdatesExcluded { get; set; }
     /// <summary>Installed apps whose category needs a security review (monitoring, remote access, PUPs...).</summary>
     public int SoftwareToReview { get; set; }
+    public int BuildChecksFailed { get; set; }
+    public int BuildChecksWarn { get; set; }
 }
 
 public sealed class ScanResult
@@ -192,6 +194,8 @@ public sealed class ScanResult
     public List<Finding> Findings { get; set; } = [];
     public List<UpdateCandidate> Updates { get; set; } = [];
     public List<InstalledItem> Inventory { get; set; } = [];
+    public global::PatchSentinel.Core.Device.DeviceInfo? Device { get; set; }
+    public List<global::PatchSentinel.Core.Device.BuildCheckResult> BuildChecks { get; set; } = [];
     public List<string> Warnings { get; set; } = [];
 
     public ScanCounts Counts => new()
@@ -202,6 +206,8 @@ public sealed class ScanResult
         UpdatesAvailable = Updates.Count(u => u.Installable),
         UpdatesExcluded = Updates.Count(u => u.Excluded),
         SoftwareToReview = Inventory.Count(i => i.Classification?.Concern is Rules.Concern.Review or Rules.Concern.High),
+        BuildChecksFailed = BuildChecks.Count(c => c.Status == global::PatchSentinel.Core.Device.CheckStatus.Fail),
+        BuildChecksWarn = BuildChecks.Count(c => c.Status == global::PatchSentinel.Core.Device.CheckStatus.Warn),
     };
 
     /// <summary>Copy without the (large) inventory, for IPC.</summary>

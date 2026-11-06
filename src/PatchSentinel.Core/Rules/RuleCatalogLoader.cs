@@ -41,6 +41,7 @@ public static class RuleCatalogLoader
             CatalogVersion = $"{baseCatalog.CatalogVersion}+local",
             Rules = rules.Values.ToList(),
             Categories = cats.Values.ToList(),
+            BuildChecklist = overrides.BuildChecklist.Count > 0 ? overrides.BuildChecklist : baseCatalog.BuildChecklist,
         };
     }
 

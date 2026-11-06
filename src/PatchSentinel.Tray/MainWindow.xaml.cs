@@ -70,6 +70,17 @@ public sealed class AppRow : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
+public sealed class ChecklistRow
+{
+    public Core.Device.BuildCheckResult Result { get; init; } = new();
+    public int Step => Result.Step;
+    public string Title => Result.Title;
+    public string Status => Result.Status.ToString();
+    public string StatusLabel => Core.Reporting.DeviceReport.StatusText(Result.Status);
+    public string Detail => Result.Detail;
+    public string CopyText => $"{Step}. {Title} - {StatusLabel}: {Detail}";
+}
+
 public sealed class HistoryRow
 {
     public HistoryEntry Entry { get; init; } = new();
@@ -182,6 +193,7 @@ public partial class MainWindow : Window
         "schedule" => ScheduleTab,
         "history" => HistoryTab,
         "apps" => AppsTab,
+        "device" => DeviceTab,
         _ => OverviewTab,
     };
 
@@ -305,6 +317,9 @@ public partial class MainWindow : Window
         }
         else parts.Add("Automatic app updates are switched off.");
         ScheduleSummaryText.Text = string.Join(" ", parts);
+        DeviceSummaryText.Text = c.BuildChecksFailed + c.BuildChecksWarn == 0 ? ""
+            : $"Device build checklist: {c.BuildChecksFailed} need action, {c.BuildChecksWarn} to check - see the Device tab.";
+        DeviceSummaryText.Foreground = (System.Windows.Media.Brush)FindResource(c.BuildChecksFailed > 0 ? "Critical" : "Warning");
         DeferButton.IsEnabled = st.CanDefer && st.NextUpdateAt is not null && !busy;
 
         StatusBarText.Text = string.Join("  ·  ", new[]
@@ -426,6 +441,7 @@ public partial class MainWindow : Window
             ? "Updates found by winget. Tick Exclude for apps that must not be updated automatically, then Save exclusions."
             : "winget (App Installer) is not installed on this device, so app updates cannot be checked.";
         WarningsText.Text = _scan.Warnings.Count == 0 ? "" : "Notes: " + string.Join(" ", _scan.Warnings.Take(4));
+        RenderDevice();
         if (_localMode) StatusBarText.Text = $"Local read-only scan at {_scan.ScannedAt.LocalDateTime:HH:mm} (agent not running)";
     }
 
@@ -507,6 +523,133 @@ public partial class MainWindow : Window
         };
         File.WriteAllText(dlg.FileName, content);
         StatusBarText.Text = $"Report saved to {dlg.FileName}";
+    }
+
+    // ---------------- device ----------------
+
+    private void RenderDevice()
+    {
+        var d = _scan?.Device;
+        DeviceSections.Children.Clear();
+        if (d is null)
+        {
+            DeviceHeadline.Text = "No device information yet";
+            DeviceSubhead.Text = "Device details are collected by the PatchSentinel agent during a scan (version 0.1.11 or later). Click Refresh (scan now).";
+            ChecklistGrid.ItemsSource = null;
+            ChecklistSummary.Text = "";
+            return;
+        }
+        DeviceHeadline.Text = $"{d.ComputerName} - {d.MakeModel}";
+        DeviceSubhead.Text = string.Join("  ·  ", new[]
+        {
+            string.IsNullOrEmpty(d.SerialNumber) ? null : $"Serial {d.SerialNumber}",
+            d.AgeEstimate is null ? null : $"Estimated age {d.AgeEstimate}",
+            $"collected {d.CollectedAt.LocalDateTime:dd MMM HH:mm}",
+        }.Where(x => x is not null));
+
+        var checks = _scan!.BuildChecks;
+        ChecklistGrid.ItemsSource = checks.Select(c => new ChecklistRow { Result = c }).ToList();
+        var fail = checks.Count(c => c.Status == Core.Device.CheckStatus.Fail);
+        var warn = checks.Count(c => c.Status == Core.Device.CheckStatus.Warn);
+        var pass = checks.Count(c => c.Status == Core.Device.CheckStatus.Pass);
+        ChecklistSummary.Text = checks.Count == 0 ? "No checklist in the rules catalogue."
+            : $"{pass} OK, {fail} need action, {warn} to check, {checks.Count(c => c.Status is Core.Device.CheckStatus.Manual)} to confirm by hand. Steps follow your device build sheet.";
+
+        foreach (var group in Core.Reporting.DeviceReport.Rows(d).GroupBy(r => r.Section))
+        {
+            var grid = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var row = 0;
+            foreach (var r in group)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var label = new TextBlock { Text = r.Field, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 8, 3) };
+                label.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+                var value = new TextBox
+                {
+                    Text = r.Value, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0),
+                    Background = System.Windows.Media.Brushes.Transparent, Padding = new Thickness(0), MinHeight = 0, Margin = new Thickness(0, 3, 6, 3),
+                };
+                Grid.SetRow(label, row); Grid.SetRow(value, row); Grid.SetColumn(value, 1);
+                grid.Children.Add(label); grid.Children.Add(value);
+                if (r.Status is { } st)
+                {
+                    var pill = StatusPill(st);
+                    Grid.SetRow(pill, row); Grid.SetColumn(pill, 2);
+                    grid.Children.Add(pill);
+                }
+                row++;
+            }
+            var panel = new StackPanel();
+            panel.Children.Add(new TextBlock { Text = group.Key, FontWeight = FontWeights.SemiBold, FontSize = 14 });
+            panel.Children.Add(grid);
+            var card = new Border { Child = panel, Width = 480, Margin = new Thickness(0, 0, 12, 12) };
+            card.SetResourceReference(StyleProperty, "Card");
+            DeviceSections.Children.Add(card);
+        }
+    }
+
+    private static Border StatusPill(Core.Device.CheckStatus s)
+    {
+        var (bg, fg) = s switch
+        {
+            Core.Device.CheckStatus.Pass => ("#12B76A", "#FFFFFF"),
+            Core.Device.CheckStatus.Warn => ("#F79009", "#FFFFFF"),
+            Core.Device.CheckStatus.Fail => ("#D92D20", "#FFFFFF"),
+            Core.Device.CheckStatus.Manual => ("#E4E7EC", "#344054"),
+            _ => ("#D1E9FF", "#175CD3"),
+        };
+        var conv = new System.Windows.Media.BrushConverter();
+        return new Border
+        {
+            CornerRadius = new CornerRadius(9), Padding = new Thickness(8, 1, 8, 1), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 3, 0, 3),
+            Background = (System.Windows.Media.Brush)conv.ConvertFromString(bg)!,
+            Child = new TextBlock { Text = Core.Reporting.DeviceReport.StatusText(s), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = (System.Windows.Media.Brush)conv.ConvertFromString(fg)! },
+        };
+    }
+
+    private async void ExportDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scan?.Device is not { } device) { MessageBox.Show(this, "Run a scan first (Refresh).", "Export device report"); return; }
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"PatchSentinel-device-{device.ComputerName}-{DateTime.Now:yyyyMMdd}",
+            Filter = "Excel workbook - device, checklist and apps (*.xlsx)|*.xlsx|HTML report (*.html)|*.html|CSV - device and checklist (*.csv)|*.csv",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        try
+        {
+            if (!_inventoryLoaded) await LoadInventoryAsync();
+            var apps = _inventory.Where(i => !i.IsSystemComponent).ToList();
+            switch (Path.GetExtension(dlg.FileName).ToLowerInvariant())
+            {
+                case ".html":
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(apps, device.ComputerName, device, _scan.BuildChecks));
+                    break;
+                case ".csv":
+                    File.WriteAllText(dlg.FileName, Core.Reporting.DeviceReport.ToCsv(device, _scan.BuildChecks), new System.Text.UTF8Encoding(true));
+                    break;
+                default:
+                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(apps, device.ComputerName, f, device, _scan.BuildChecks);
+                    break;
+            }
+            StatusBarText.Text = $"Device report saved to {dlg.FileName}";
+            if (MessageBox.Show(this, "Device report saved. Open it now?", "Export device report", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
+    }
+
+    private void CopyDeviceSummary_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scan?.Device is not { } d) return;
+        var lines = Core.Reporting.DeviceReport.Rows(d).Select(r => $"{r.Section} - {r.Field}: {r.Value}").ToList();
+        lines.Add("");
+        lines.AddRange(_scan.BuildChecks.Select(c => $"{c.Step}. {c.Title} - {Core.Reporting.DeviceReport.StatusText(c.Status)}: {c.Detail}"));
+        SetClipboard(string.Join(Environment.NewLine, lines));
+        StatusBarText.Text = "Device summary copied to the clipboard.";
     }
 
     // ---------------- installed apps ----------------
@@ -635,13 +778,13 @@ public partial class MainWindow : Window
             switch (Path.GetExtension(dlg.FileName).ToLowerInvariant())
             {
                 case ".html":
-                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(items, Environment.MachineName));
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToHtml(items, Environment.MachineName, _scan?.Device, _scan?.BuildChecks));
                     break;
                 case ".csv":
-                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToCsv(items, Environment.MachineName), new System.Text.UTF8Encoding(true));
+                    File.WriteAllText(dlg.FileName, Core.Reporting.InventoryExporter.ToCsv(items, Environment.MachineName, _scan?.Device), new System.Text.UTF8Encoding(true));
                     break;
                 default:
-                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(items, Environment.MachineName, f);
+                    using (var f = File.Create(dlg.FileName)) Core.Reporting.InventoryExporter.WriteXlsx(items, Environment.MachineName, f, _scan?.Device, _scan?.BuildChecks);
                     break;
             }
             StatusBarText.Text = $"Exported {items.Count} apps to {dlg.FileName}";

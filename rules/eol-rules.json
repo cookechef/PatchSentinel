@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.06.2",
+  "catalogVersion": "2026.11.06.3",
   "rules": [
     {
       "id": "dotnet-runtime",
@@ -1301,6 +1301,233 @@
       "excludePatterns": [
         "GitHub Copilot for"
       ]
+    }
+  ],
+  "buildChecklist": [
+    {
+      "step": 1,
+      "id": "bloatware",
+      "title": "Remove unnecessary bundled apps (e.g. McAfee, HP Wolf Security)",
+      "type": "appsAbsent",
+      "patterns": [
+        "McAfee",
+        "HP Wolf Security",
+        "HP Sure Click",
+        "HP Sure Sense",
+        "HP Security Update Service",
+        "Norton (?:Security|360)",
+        "WildTangent",
+        "ExpressVPN",
+        "Booking\\.com",
+        "Dropbox (?:Promotion|Update Helper)",
+        "Amazon Alexa",
+        "Dolby Access",
+        "Spotify",
+        "Netflix",
+        "Candy Crush",
+        "Disney\\+",
+        "TikTok",
+        "LinkedIn",
+        "Avast (?:Free Antivirus|One)",
+        "AVG (?:AntiVirus|Internet Security)"
+      ],
+      "hint": "Uninstall them from the Installed apps tab."
+    },
+    {
+      "step": 2,
+      "id": "windows-update",
+      "title": "Run Windows Update",
+      "type": "builtin",
+      "check": "windowsUpdate",
+      "hint": "Run Windows Update (or WUMT) until no updates remain, then restart."
+    },
+    {
+      "step": 3,
+      "id": "drivers",
+      "title": "Check the device specification and drivers",
+      "type": "builtin",
+      "check": "problemDevices",
+      "hint": "Install the missing drivers from the manufacturer."
+    },
+    {
+      "step": 4,
+      "id": "bios",
+      "title": "Install manufacturer BIOS and firmware updates",
+      "type": "builtin",
+      "check": "bios"
+    },
+    {
+      "step": 5,
+      "id": "intel-dsa",
+      "title": "Install Intel Driver & Support Assistant and run updates",
+      "type": "builtin",
+      "check": "intelDsa"
+    },
+    {
+      "step": 5,
+      "id": "oem-tool",
+      "title": "Install the manufacturer update tool (Dell Command | Update, Lenovo Vantage, HP Support Assistant)",
+      "type": "builtin",
+      "check": "oemTools"
+    },
+    {
+      "step": 6,
+      "id": "atera",
+      "title": "Install Atera under the correct customer",
+      "type": "appsPresentAny",
+      "patterns": [
+        "AteraAgent",
+        "Atera Agent"
+      ],
+      "hint": "Install the Atera agent for this customer."
+    },
+    {
+      "step": 7,
+      "id": "screenconnect",
+      "title": "ScreenConnect installed (move to the correct customer)",
+      "type": "appsPresentAny",
+      "patterns": [
+        "ScreenConnect Client",
+        "ConnectWise Control Client"
+      ]
+    },
+    {
+      "step": 8,
+      "id": "antivirus",
+      "title": "Antivirus installed through Atera (Bitdefender or SentinelOne)",
+      "type": "builtin",
+      "check": "antivirus",
+      "patterns": [
+        "Bitdefender",
+        "SentinelOne",
+        "Sentinel Agent"
+      ]
+    },
+    {
+      "step": 9,
+      "id": "joined",
+      "title": "Joined to the domain or Microsoft Entra ID",
+      "type": "builtin",
+      "check": "joined"
+    },
+    {
+      "step": 10,
+      "id": "ou",
+      "title": "Device in the correct OU or group",
+      "type": "builtin",
+      "check": "ou"
+    },
+    {
+      "step": 11,
+      "id": "bitlocker",
+      "title": "BitLocker enabled (recovery key stored in IT Glue)",
+      "type": "builtin",
+      "check": "bitlocker"
+    },
+    {
+      "step": 12,
+      "id": "standard-apps",
+      "title": "7-Zip, Google Chrome and a PDF reader installed",
+      "type": "appsPresentAll",
+      "groups": [
+        {
+          "label": "7-Zip",
+          "patterns": [
+            "7-Zip"
+          ]
+        },
+        {
+          "label": "Google Chrome",
+          "patterns": [
+            "Google Chrome"
+          ]
+        },
+        {
+          "label": "Adobe Acrobat Reader or Foxit Reader",
+          "patterns": [
+            "Adobe Acrobat",
+            "Foxit (?:PDF )?Reader",
+            "Foxit PDF Editor"
+          ]
+        }
+      ]
+    },
+    {
+      "step": 13,
+      "id": "vpn",
+      "title": "Client VPN installed (if required)",
+      "type": "appsPresentAny",
+      "whenMissing": "Info",
+      "patterns": [
+        "Smart VPN",
+        "FortiClient",
+        "OpenVPN",
+        "WireGuard",
+        "Cisco Secure Client",
+        "AnyConnect",
+        "GlobalProtect",
+        "SonicWall",
+        "NetExtender",
+        "WatchGuard",
+        "Check Point",
+        "Cloudflare One",
+        "Zscaler"
+      ]
+    },
+    {
+      "step": 14,
+      "id": "displaylink",
+      "title": "DisplayLink docking station driver (if required)",
+      "type": "appsPresentAny",
+      "whenMissing": "Info",
+      "patterns": [
+        "DisplayLink"
+      ]
+    },
+    {
+      "step": 15,
+      "id": "office",
+      "title": "Microsoft Office installed",
+      "type": "appsPresentAny",
+      "patterns": [
+        "Microsoft 365 Apps",
+        "Microsoft 365 - ",
+        "Microsoft Office (?:Professional|Standard|Home|LTSC|365)",
+        "Microsoft Office \\d{4}"
+      ]
+    },
+    {
+      "step": 16,
+      "id": "replacement",
+      "title": "Replacement device: review the old machine's applications",
+      "type": "manual"
+    },
+    {
+      "step": 17,
+      "id": "user-apps",
+      "title": "Confirm with the client which applications the user needs",
+      "type": "manual"
+    },
+    {
+      "step": 18,
+      "id": "bespoke",
+      "title": "Install the required bespoke software",
+      "type": "manual"
+    },
+    {
+      "step": 19,
+      "id": "setup-account",
+      "title": "Generic setup account disabled",
+      "type": "builtin",
+      "check": "localAccounts"
+    },
+    {
+      "step": 20,
+      "id": "static-dns",
+      "title": "No static DNS entries",
+      "type": "builtin",
+      "check": "staticDns",
+      "hint": "Set the adapter back to 'Obtain DNS server address automatically'."
     }
   ]
 }
